@@ -1,0 +1,312 @@
+const express = require('express');
+const cors = require('cors');
+const { PrismaClient } = require('@prisma/client');
+require('dotenv').config();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const app = express();
+const prisma = new PrismaClient();
+const PORT = process.env.PORT || 3000;
+
+// Handle BigInt serialization
+BigInt.prototype.toJSON = function () { return this.toString() }
+
+app.use(cors());
+app.use(express.json());
+
+// Ensure uploads directory exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir);
+}
+
+// Configure Multer
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Basic health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date() });
+});
+
+// AUTH: Create or Update User from Telegram Data
+app.post('/api/auth', async (req, res) => {
+    try {
+        const { id, first_name, last_name, username } = req.body;
+        if (!id) return res.status(400).json({ error: 'Missing Telegram ID' });
+
+        const user = await prisma.user.upsert({
+            where: { telegramId: BigInt(id) },
+            update: { firstName: first_name, lastName: last_name, username: username },
+            create: { telegramId: BigInt(id), firstName: first_name, lastName: last_name, username: username },
+        });
+        res.json(user);
+    } catch (error) {
+        console.error('Auth Error:', error);
+        res.status(500).json({ error: 'Authentication failed' });
+    }
+});
+
+// GET Tracks (Simple list)
+app.get('/api/tracks', async (req, res) => {
+    try {
+        const tracks = await prisma.track.findMany({
+            include: { submittedBy: true },
+            orderBy: { createdAt: 'desc' },
+            take: 50
+        });
+        res.json(tracks);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Failed to fetch tracks' });
+    }
+});
+
+// POST Track
+app.post('/api/tracks', async (req, res) => {
+    try {
+        const { url, artist, title, userId } = req.body;
+        if (!url || !artist || !title || !userId) {
+            return res.status(400).json({ error: 'Missing required fields' });
+        }
+        const track = await prisma.track.create({
+            data: { url, artist, title, submittedBy: { connect: { id: userId } } }
+        });
+        res.json(track);
+    } catch (error) {
+        console.error('Submit Track Error:', error);
+        res.status(500).json({ error: 'Failed to submit track' });
+    }
+});
+
+// --- USER API ---
+
+// GET /api/my-tracks - Logged in user's pending tracks
+app.get('/api/my-tracks', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const tracks = await prisma.track.findMany({
+            where: { userId: Number(userId), status: 'PENDING' },
+            orderBy: { createdAt: 'desc' }
+        });
+        res.json(tracks);
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to fetch tracks' });
+    }
+});
+
+// DELETE /api/tracks/:id - User deletes their own track
+app.delete('/api/tracks/:id', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const track = await prisma.track.findUnique({ where: { id: Number(req.params.id) } });
+        if (!track) return res.status(404).json({ error: 'Not found' });
+        if (track.userId !== Number(userId)) return res.status(403).json({ error: 'Not your track' });
+        if (track.status !== 'PENDING') return res.status(400).json({ error: 'Cannot delete processed track' });
+
+        await prisma.track.delete({ where: { id: Number(req.params.id) } });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Delete failed' });
+    }
+});
+
+// PUT /api/tracks/:id - User edits their own track
+app.put('/api/tracks/:id', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    const { artist, title, url } = req.body;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const track = await prisma.track.findUnique({ where: { id: Number(req.params.id) } });
+        if (!track) return res.status(404).json({ error: 'Not found' });
+        if (track.userId !== Number(userId)) return res.status(403).json({ error: 'Not your track' });
+        if (track.status !== 'PENDING') return res.status(400).json({ error: 'Cannot edit processed track' });
+
+        const updated = await prisma.track.update({
+            where: { id: track.id },
+            data: { artist, title, url }
+        });
+        res.json(updated);
+    } catch (error) {
+        res.status(500).json({ error: 'Update failed' });
+    }
+});
+
+// --- ADMIN API ---
+
+// GET /api/admin/tracks - Get all PENDING tracks
+app.get('/api/admin/tracks', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+        if (!admin || !admin.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+        const tracks = await prisma.track.findMany({
+            where: { status: 'PENDING' },
+            include: { submittedBy: true },
+            orderBy: { createdAt: 'desc' },
+        });
+        res.json(tracks);
+    } catch (error) {
+        res.status(500).json({ error: 'Fetch failed' });
+    }
+});
+
+// GET /api/admin/playlists - Archive
+app.get('/api/admin/playlists', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+    const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+    if (!admin?.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+    const playlists = await prisma.playlist.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { tracks: true } } }
+    });
+    res.json(playlists);
+});
+
+// GET /api/admin/playlists/:id - Details
+app.get('/api/admin/playlists/:id', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+    const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+    if (!admin?.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+    const playlist = await prisma.playlist.findUnique({
+        where: { id: Number(req.params.id) },
+        include: { tracks: { include: { submittedBy: true } } }
+    });
+    res.json(playlist);
+});
+
+// PUT /api/admin/playlists/:id - Update Link
+app.put('/api/admin/playlists/:id', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    const { serviceUrl } = req.body;
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+    const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+    if (!admin?.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+    const updated = await prisma.playlist.update({
+        where: { id: Number(req.params.id) },
+        data: { serviceUrl }
+    });
+    res.json(updated);
+});
+
+// PUT /api/admin/tracks/:id - Edit track
+app.put('/api/admin/tracks/:id', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    const { artist, title, url } = req.body;
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+        if (!admin || !admin.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+        const updated = await prisma.track.update({
+            where: { id: Number(req.params.id) },
+            data: { artist, title, url }
+        });
+        res.json(updated);
+    } catch (error) {
+        res.status(500).json({ error: 'Update failed' });
+    }
+});
+
+// DELETE /api/admin/tracks/:id - Delete track
+app.delete('/api/admin/tracks/:id', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+        if (!admin || !admin.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+        await prisma.track.delete({ where: { id: Number(req.params.id) } });
+        res.json({ success: true });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Delete failed' });
+    }
+});
+
+// POST /api/admin/playlists - Create Playlist (with Cover upload)
+app.post('/api/admin/playlists', upload.single('cover'), async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    const { title } = req.body;
+    const file = req.file;
+
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+        if (!admin || !admin.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+        const pendingTracks = await prisma.track.findMany({ where: { status: 'PENDING' }, select: { id: true } });
+        if (pendingTracks.length === 0) return res.status(400).json({ error: 'No tracks to playlist' });
+
+        const coverUrl = file ? `/uploads/${file.filename}` : null;
+
+        const result = await prisma.$transaction(async (tx) => {
+            const playlist = await tx.playlist.create({
+                data: { title, coverUrl }
+            });
+            await tx.track.updateMany({
+                where: { status: 'PENDING' },
+                data: { status: 'PROCESSED', playlistId: playlist.id }
+            });
+            return playlist;
+        });
+        res.json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Playlist creation failed' });
+    }
+});
+
+// TEST ONLY: Toggle Admin for specific user
+app.post('/api/test/toggle-admin', async (req, res) => {
+    try {
+        const TEST_ID = 123456;
+        console.log(`Toggling admin for ID: ${TEST_ID}`);
+        const user = await prisma.user.findFirst({ where: { telegramId: BigInt(TEST_ID) } });
+        if (!user) {
+            console.log('User not found in DB');
+            return res.status(404).json({ error: 'Test user not found' });
+        }
+        const updated = await prisma.user.update({
+            where: { id: user.id },
+            data: { isAdmin: !user.isAdmin }
+        });
+        console.log(`User ${user.id} toggled. New isAdmin: ${updated.isAdmin}`);
+        res.json(updated);
+    } catch (error) {
+        console.error('Toggle Admin Error:', error);
+        res.status(500).json({ error: 'Failed to toggle admin' });
+    }
+});
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});

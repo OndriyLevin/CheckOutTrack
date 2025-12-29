@@ -1,0 +1,25 @@
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./server:/app
+      - /app/node_modules
+    environment:
+      - DATABASE_URL=file:./dev.db
+    restart: always
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80" # Nginx will listen on 80 inside container
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    depends_on:
+      - server
