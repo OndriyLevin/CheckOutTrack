@@ -15,7 +15,8 @@ const PORT = process.env.PORT || 3000;
 BigInt.prototype.toJSON = function () { return this.toString() }
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Ensure uploads directory exists
 const uploadDir = path.join(__dirname, 'uploads');
@@ -82,6 +83,32 @@ app.post('/api/tracks', async (req, res) => {
         if (!url || !artist || !title || !userId) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
+
+        // Check for duplicates (Case-insensitive)
+        const duplicate = await prisma.track.findFirst({
+            where: {
+                artist: { equals: artist },
+                title: { equals: title },
+                status: 'PENDING'
+            }
+        });
+
+        if (duplicate) {
+            return res.status(409).json({ error: 'Этот трек уже был добавлен!' });
+        }
+
+        // Check for User Limit (Max 5 Pending)
+        const userPendingCount = await prisma.track.count({
+            where: {
+                userId: Number(userId),
+                status: 'PENDING'
+            }
+        });
+
+        if (userPendingCount >= 5) {
+            return res.status(429).json({ error: 'Вы не можете добавить больше 5 треков в очередь!' });
+        }
+
         const track = await prisma.track.create({
             data: { url, artist, title, submittedBy: { connect: { id: userId } } }
         });
@@ -89,6 +116,133 @@ app.post('/api/tracks', async (req, res) => {
     } catch (error) {
         console.error('Submit Track Error:', error);
         res.status(500).json({ error: 'Failed to submit track' });
+    }
+});
+
+// GET Metadata from URL
+// GET Metadata from URL
+app.post('/api/metadata', async (req, res) => {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ error: 'Missing URL' });
+
+    try {
+        const response = await axios.get(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7'
+            },
+            timeout: 5000,
+            maxRedirects: 5
+        });
+
+        console.log(`[Metadata] Final URL: ${response.request.res.responseUrl}`);
+
+        const cheerio = require('cheerio');
+        const $ = cheerio.load(response.data);
+
+        let artist = '';
+        let title = '';
+        let rawTitle = $('meta[property="og:title"]').attr('content') || $('title').text() || '';
+        let siteName = $('meta[property="og:site_name"]').attr('content') || '';
+
+        console.log(`[Metadata] URL: ${url}`);
+        console.log(`[Metadata] Raw Title: "${rawTitle}", Site: "${siteName}"`);
+
+        // Heuristics
+
+        // 1. Try Specific Meta Tags (e.g. music:musician)
+        const musicMusician = $('meta[property="music:musician"]').attr('content');
+        if (musicMusician) artist = musicMusician;
+
+        // 2. Yandex Music
+        if (url.includes('music.yandex') || siteName.includes('Yandex Music')) {
+            // Try to extract Track ID
+            const trackMatch = url.match(/track\/(\d+)/);
+            if (trackMatch && trackMatch[1]) {
+                const trackId = trackMatch[1];
+                console.log(`[Metadata] Detected Yandex Track ID: ${trackId}. Trying Handlers API...`);
+                try {
+                    // Internal Web Handler API (often works where public API fails 451)
+                    const handlerUrl = `https://music.yandex.ru/handlers/track.jsx?track=${trackId}&lang=ru`;
+                    const apiRes = await axios.get(handlerUrl, {
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1',
+                            'Referer': 'https://music.yandex.ru/'
+                        }
+                    });
+
+                    if (apiRes.data && apiRes.data.track) {
+                        const trackData = apiRes.data.track;
+                        const apiTitle = trackData.title;
+                        // Artist can be multiple
+                        const apiArtist = trackData.artists ? trackData.artists.map(a => a.name).join(', ') : '';
+
+                        if (apiTitle && apiArtist) {
+                            console.log(`[Metadata] Handler Success -> ${apiArtist} - ${apiTitle}`);
+                            return res.json({ artist: apiArtist, title: apiTitle });
+                        }
+                    }
+                } catch (apiErr) {
+                    console.error(`[Metadata] Handler Failed: ${apiErr.message}`);
+                }
+            }
+
+            if (rawTitle.includes('собираем музыку для вас') || rawTitle.includes('Яндекс Музыка')) {
+                // Generic title, useless.
+                console.log('[Metadata] Ignoring generic Yandex title.');
+            }
+            else if (rawTitle.includes(' — ')) { // Yandex uses long dash
+                const parts = rawTitle.split(' — ');
+                title = parts[0].trim();
+                artist = parts[1].trim(); // "Track — Artist"
+            } else if (rawTitle.includes('-')) {
+                // Fallback
+                const parts = rawTitle.split('-');
+                title = parts[0].trim();
+                artist = parts[1].trim();
+            }
+        }
+        // 3. Spotify
+        else if (url.includes('spotify') || siteName.includes('Spotify')) {
+            // "Track - Song by Artist"
+            if (rawTitle.includes(' - Song by ')) {
+                const parts = rawTitle.split(' - Song by ');
+                title = parts[0].trim();
+                artist = parts[1].trim();
+            }
+            // "Track - Artist"
+            else if (rawTitle.includes(' - ')) {
+                const parts = rawTitle.split(' - ');
+                title = parts[0].trim();
+                artist = parts[1].trim();
+            }
+        }
+        // 4. Default Fallback
+        else if (!artist || !title) {
+            if (rawTitle.includes(' - ')) {
+                const parts = rawTitle.split(' - ');
+                // Assume "Artist - Track" for generic sites (Youtube style)
+                // BUT "Track - Artist" is also common. 
+                // Let's rely on the first part being Artist usually for video/radio.
+                // However, user said "nothing comes back", so ANY data is better.
+                artist = parts[0].trim();
+                title = parts.slice(1).join(' - ').trim();
+            } else {
+                title = rawTitle;
+            }
+        }
+
+        // Clean up
+        if (artist.endsWith('| Spotify')) artist = artist.replace('| Spotify', '').trim();
+
+        console.log(`[Metadata] Result -> Artist: "${artist}", Title: "${title}"`);
+
+        res.json({ artist, title });
+    } catch (error) {
+        console.error('Metadata Fetch Error:', error.message);
+        // If it fails (e.g. 403), return empty
+        res.json({ artist: '', title: '' });
     }
 });
 
@@ -328,6 +482,40 @@ app.post('/api/admin/playlists/:id/export/yandex', async (req, res) => {
             }
         } else {
             console.log('No tracks found to add.');
+        }
+
+        // 5. Upload Cover (if exists)
+        if (playlist.coverUrl) {
+            try {
+                console.log('Attempting to upload cover...');
+                // Resolve local path
+                const filename = path.basename(playlist.coverUrl);
+                const filePath = path.join(__dirname, 'uploads', filename);
+
+                if (fs.existsSync(filePath)) {
+                    const FormData = require('form-data');
+                    const form = new FormData();
+                    form.append('image', fs.createReadStream(filePath)); // Try 'image' as field name
+
+                    // Post directly to Yandex
+                    // Note: Yandex API often expects 'file' parameter
+                    await yandexApi.post(`https://api.music.yandex.net/users/${uid}/playlists/${yandexKind}/cover/upload`, form, {
+                        headers: {
+                            'Authorization': `OAuth ${yandexToken}`,
+                            ...form.getHeaders()
+                        },
+                        params: {
+                            revision: revision // Might differ if cover updates revision? Safe to try.
+                        }
+                    });
+
+                    console.log('Cover uploaded successfully!');
+                } else {
+                    console.warn('Local cover file not found:', filePath);
+                }
+            } catch (coverErr) {
+                console.error('Cover Upload Failed:', coverErr.message, coverErr.response?.data);
+            }
         }
 
         // 5. Update local playlist Service URL

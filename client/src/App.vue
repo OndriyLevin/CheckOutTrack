@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
 import AdminDashboard from './components/AdminDashboard.vue'
 
@@ -19,6 +19,38 @@ const showAdmin = ref(false)
 const editingTrack = ref(null)
 const swipedTrackId = ref(null)
 const touchStartX = ref(0)
+const isLocked = ref(false)
+
+// Auto-fetch Metadata
+let metadataTimeout;
+watch(() => form.value.url, (newVal) => {
+    if (metadataTimeout) clearTimeout(metadataTimeout);
+    if (newVal && newVal.length > 10) {
+        // If user clears URL, maybe unlock? keep it simple.
+        
+        metadataTimeout = setTimeout(async () => {
+            try {
+                if (!newVal.startsWith('http')) return;
+                
+                showStatus('🔍 Searching info...', 'success');
+                const res = await axios.post('/api/metadata', { url: newVal });
+                
+                if (res.data.artist || res.data.title) {
+                    if (res.data.artist) form.value.artist = res.data.artist;
+                    if (res.data.title) form.value.title = res.data.title;
+                    isLocked.value = true; // Lock if found
+                    showStatus('✅ Info found!', 'success');
+                } else {
+                    showStatus('⚠️ Info not found, please enter manually', 'error');
+                    isLocked.value = false; // Unlock if failed
+                }
+            } catch (e) {
+                console.error('Metadata auto-fetch failed', e);
+                isLocked.value = false;
+            }
+        }, 800);
+    }
+})
 
 const showStatus = (msg, type = 'success') => {
   statusMsg.value = msg
@@ -60,7 +92,7 @@ const submitTrack = async () => {
     showStatus('Track submitted successfully!')
   } catch (e) {
     console.error(e)
-    showStatus('Failed to submit track', 'error')
+    showStatus(e.response?.data?.error || 'Failed to submit track', 'error')
   }
 }
 
@@ -204,26 +236,45 @@ onMounted(async () => {
         </h2>
         
         <div class="space-y-4">
-          <div class="group">
-            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Исполнитель</label>
-            <input 
-              v-model="form.artist" type="text" placeholder="Daft Punk"
-              class="w-full px-4 py-3.5 text-lg rounded-2xl bg-brand-dark border-2 border-transparent focus:border-brand-yellow/50 focus:bg-black/50 text-white placeholder-gray-600 outline-none transition-all shadow-inner"
-            />
-          </div>
-          <div class="group">
-            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Название трека</label>
-            <input 
-              v-model="form.title" type="text" placeholder="Get Lucky"
-              class="w-full px-4 py-3.5 text-lg rounded-2xl bg-brand-dark border-2 border-transparent focus:border-brand-yellow/50 focus:bg-black/50 text-white placeholder-gray-600 outline-none transition-all shadow-inner"
-            />
-          </div>
+          <!-- URL Input (Now First) -->
           <div class="group">
             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Ссылка</label>
             <input 
               v-model="form.url" type="url" placeholder="https://..."
               class="w-full px-4 py-3.5 text-lg rounded-2xl bg-brand-dark border-2 border-transparent focus:border-brand-yellow/50 focus:bg-black/50 text-white placeholder-gray-600 outline-none transition-all shadow-inner"
             />
+          </div>
+
+          <!-- Artist (Read Only / Auto) -->
+          <div class="group">
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Исполнитель</label>
+            <div class="relative">
+                <input 
+                  v-model="form.artist" type="text" placeholder="Заполнится автоматически" 
+                  :readonly="isLocked"
+                  class="w-full px-4 py-3.5 text-lg rounded-2xl bg-brand-dark border-2 border-transparent transition-all outline-none"
+                  :class="isLocked ? 'text-gray-400 cursor-not-allowed bg-brand-dark/50' : 'text-white focus:border-brand-yellow/50 focus:bg-black/50'"
+                />
+                <button v-if="isLocked" @click="isLocked = false" class="absolute right-4 top-4 text-brand-yellow hover:text-white transition-colors" title="Разблокировать">
+                    🔒
+                </button>
+            </div>
+          </div>
+
+          <!-- Title (Read Only / Auto) -->
+          <div class="group">
+             <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Название трека</label>
+             <div class="relative">
+                <input 
+                  v-model="form.title" type="text" placeholder="Заполнится автоматически" 
+                  :readonly="isLocked"
+                   class="w-full px-4 py-3.5 text-lg rounded-2xl bg-brand-dark border-2 border-transparent transition-all outline-none"
+                   :class="isLocked ? 'text-gray-400 cursor-not-allowed bg-brand-dark/50' : 'text-white focus:border-brand-yellow/50 focus:bg-black/50'"
+                />
+                <button v-if="isLocked" @click="isLocked = false" class="absolute right-4 top-4 text-brand-yellow hover:text-white transition-colors" title="Разблокировать">
+                    🔒
+                </button>
+             </div>
           </div>
         </div>
 
