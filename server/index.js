@@ -49,10 +49,33 @@ app.post('/api/auth', async (req, res) => {
         const { id, first_name, last_name, username } = req.body;
         if (!id) return res.status(400).json({ error: 'Missing Telegram ID' });
 
+        // Check explicit Admin ID from Env
+        const isEnvAdmin = process.env.ADMIN_ID && String(id) === String(process.env.ADMIN_ID);
+
+        // Prepare data
+        const userData = {
+            firstName: first_name,
+            lastName: last_name,
+            username: username
+        };
+
+        // If Env Admin, enforce true. Otherwise, do NOT overwrite strictly (preserve manual DB admins if any)
+        // Check if we want to auto-demote? Yes, if strict env var is set.
+        const adminIdEnv = process.env.ADMIN_ID;
+        if (adminIdEnv) {
+            userData.isAdmin = isEnvAdmin;
+        } else if (isEnvAdmin) {
+            userData.isAdmin = true;
+        }
+
         const user = await prisma.user.upsert({
             where: { telegramId: BigInt(id) },
-            update: { firstName: first_name, lastName: last_name, username: username },
-            create: { telegramId: BigInt(id), firstName: first_name, lastName: last_name, username: username },
+            update: userData,
+            create: {
+                telegramId: BigInt(id),
+                ...userData,
+                isAdmin: isEnvAdmin || false
+            },
         });
         res.json(user);
     } catch (error) {

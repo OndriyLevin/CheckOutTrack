@@ -156,12 +156,6 @@ onMounted(async () => {
     tg.ready()
     tg.expand()
     user.value = tg.initDataUnsafe?.user
-    
-    // Fallback for local testing (Browser)
-    if (!user.value) {
-       console.log('No Telegram user found, using Test User')
-       user.value = { id: 123456, first_name: 'Test', username: 'testuser' }
-    }
 
     if (user.value) {
       try {
@@ -219,13 +213,7 @@ onMounted(async () => {
           Админка
         </button>
         
-        <!-- DEV: Toggle Admin Rights -->
-        <button 
-           @click="toggleTestAdmin"
-           class="absolute top-0 left-0 text-[10px] opacity-10 active:opacity-100 text-gray-500 hover:text-white transition-opacity"
-        >
-          Dev
-        </button>
+
       </header>
 
       <!-- Submission Form -->
