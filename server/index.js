@@ -614,6 +614,37 @@ app.post('/api/admin/playlists', upload.single('cover'), async (req, res) => {
     }
 });
 
+// DELETE /api/admin/playlists/:id
+app.delete('/api/admin/playlists/:id', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+        if (!admin || !admin.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+        const playlistId = Number(req.params.id);
+
+        await prisma.$transaction(async (tx) => {
+            // Unlink tracks (keep them processed/archived)
+            await tx.track.updateMany({
+                where: { playlistId: playlistId },
+                data: { playlistId: null } // Keep status as PROCESSED
+            });
+
+            // Delete playlist
+            await tx.playlist.delete({
+                where: { id: playlistId }
+            });
+        });
+
+        res.json({ success: true });
+    } catch (error) {
+        console.error('Delete Playlist Error:', error);
+        res.status(500).json({ error: 'Failed to delete playlist' });
+    }
+});
+
 // TEST ONLY: Toggle Admin for specific user
 app.post('/api/test/toggle-admin', async (req, res) => {
     try {
