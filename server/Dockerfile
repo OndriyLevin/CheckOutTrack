@@ -11,4 +11,4 @@ RUN npx prisma generate
 
 EXPOSE 3000
 VOLUME ["/app/uploads"]
-CMD ["sh", "-c", "npx prisma db push && npm start"]
+CMD ["sh", "-c", "npm install && npx prisma generate && npx prisma db push && npm start"]

@@ -138,7 +138,7 @@ onMounted(async () => {
         fetchMyTracks()
       } catch (e) {
         console.error("Auth failed", e)
-        showStatus('Authentication failed. Please try again.', 'error')
+        showStatus('Error: ' + (e.response?.data?.error || e.message), 'error')
       }
     }
   }
@@ -147,15 +147,15 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-tg-bg text-tg-text p-4 font-sans pb-safe">
+  <div class="min-h-screen bg-brand-dark text-white p-4 font-sans pb-safe selection:bg-brand-yellow selection:text-brand-dark">
     <div v-if="loading" class="flex justify-center items-center h-screen">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-tg-link"></div>
+      <div class="animate-spin rounded-full h-10 w-10 border-4 border-brand-gray border-t-brand-yellow"></div>
     </div>
 
     <!-- Admin View -->
     <div v-if="showAdmin && dbUser?.isAdmin">
       <div class="mb-4">
-        <button @click="showAdmin = false" class="text-tg-link font-medium flex items-center text-lg active:opacity-60">
+        <button @click="showAdmin = false" class="text-brand-yellow font-bold flex items-center text-lg active:opacity-60 transition-opacity">
           <span class="text-2xl mr-1">‹</span> Назад
         </button>
       </div>
@@ -166,15 +166,23 @@ onMounted(async () => {
     <div v-else-if="user" class="max-w-md mx-auto space-y-6 pb-20">
       
       <!-- Header -->
-      <header class="text-center space-y-2 relative pt-8">
-        <h1 class="text-3xl font-bold text-tg-link">Музыка</h1>
-        <p class="text-tg-hint text-base">Привет, {{ user.first_name }}! <br>Кидай треки в плейлист.</p>
+      <header class="text-center space-y-4 relative pt-8">
+        <div class="flex justify-center mb-4">
+             <img src="/images/logo.png" alt="Cassette Logo" class="w-32 h-auto drop-shadow-[0_0_15px_rgba(255,200,0,0.5)] transform -rotate-3" />
+        </div>
+        <h1 class="text-4xl font-black text-white tracking-tight uppercase italic block drop-shadow-lg">
+          Зацени <span class="text-brand-yellow">Рознице</span> Трек
+        </h1>
+        <p class="text-gray-400 text-sm font-medium leading-relaxed max-w-[280px] mx-auto">
+          Йо, <span class="text-white font-bold">{{ user.first_name }}</span>! <br>
+          Закидывай свои любимые треки в наш общий плейлист.
+        </p>
 
         <!-- Admin Toggle Button -->
         <button 
           v-if="dbUser?.isAdmin" 
           @click="showAdmin = true"
-          class="absolute top-0 right-0 text-xs bg-tg-secondary px-3 py-2 rounded-lg text-tg-hint uppercase font-bold tracking-wider active:bg-gray-200"
+          class="absolute top-0 right-0 text-[10px] bg-brand-gray/50 px-3 py-1.5 rounded-full text-brand-yellow/80 uppercase font-black tracking-widest border border-brand-yellow/20 active:bg-brand-yellow active:text-brand-dark transition-all"
         >
           Админка
         </button>
@@ -182,43 +190,46 @@ onMounted(async () => {
         <!-- DEV: Toggle Admin Rights -->
         <button 
            @click="toggleTestAdmin"
-           class="absolute top-0 left-0 text-[10px] opacity-30 active:opacity-100 bg-gray-200 p-2 rounded"
+           class="absolute top-0 left-0 text-[10px] opacity-10 active:opacity-100 text-gray-500 hover:text-white transition-opacity"
         >
           Dev
         </button>
       </header>
 
       <!-- Submission Form -->
-      <div class="bg-tg-secondary p-5 rounded-2xl shadow-sm space-y-5">
-        <h2 class="text-xl font-semibold mb-2">Новый трек</h2>
+      <div class="bg-brand-gray/40 backdrop-blur-md p-6 rounded-3xl border border-white/5 shadow-xl space-y-6">
+        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+            <span class="w-2 h-6 bg-brand-yellow rounded-full inline-block"></span>
+            Новый трек
+        </h2>
         
         <div class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-tg-hint mb-1">Исполнитель</label>
+          <div class="group">
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Исполнитель</label>
             <input 
-              v-model="form.artist" type="text" placeholder="например, Daft Punk"
-              class="w-full px-4 py-3 text-lg rounded-xl bg-tg-bg border-none focus:ring-2 focus:ring-tg-link outline-none transition-all placeholder:text-gray-300"
+              v-model="form.artist" type="text" placeholder="Daft Punk"
+              class="w-full px-4 py-3.5 text-lg rounded-2xl bg-brand-dark border-2 border-transparent focus:border-brand-yellow/50 focus:bg-black/50 text-white placeholder-gray-600 outline-none transition-all shadow-inner"
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-tg-hint mb-1">Название</label>
+          <div class="group">
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Название трека</label>
             <input 
-              v-model="form.title" type="text" placeholder="например, Get Lucky"
-              class="w-full px-4 py-3 text-lg rounded-xl bg-tg-bg border-none focus:ring-2 focus:ring-tg-link outline-none transition-all placeholder:text-gray-300"
+              v-model="form.title" type="text" placeholder="Get Lucky"
+              class="w-full px-4 py-3.5 text-lg rounded-2xl bg-brand-dark border-2 border-transparent focus:border-brand-yellow/50 focus:bg-black/50 text-white placeholder-gray-600 outline-none transition-all shadow-inner"
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-tg-hint mb-1">Ссылка</label>
+          <div class="group">
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 ml-1">Ссылка</label>
             <input 
-              v-model="form.url" type="url" placeholder="https://music.yandex..."
-              class="w-full px-4 py-3 text-lg rounded-xl bg-tg-bg border-none focus:ring-2 focus:ring-tg-link outline-none transition-all placeholder:text-gray-300"
+              v-model="form.url" type="url" placeholder="https://..."
+              class="w-full px-4 py-3.5 text-lg rounded-2xl bg-brand-dark border-2 border-transparent focus:border-brand-yellow/50 focus:bg-black/50 text-white placeholder-gray-600 outline-none transition-all shadow-inner"
             />
           </div>
         </div>
 
         <button 
           @click="submitTrack"
-          class="w-full py-4 mt-2 bg-tg-button text-white text-lg font-bold rounded-xl active:scale-95 transition-transform shadow-lg shadow-blue-500/20"
+          class="w-full py-4 bg-brand-yellow text-brand-dark text-lg font-black uppercase tracking-wide rounded-2xl active:scale-[0.98] transition-all shadow-[0_4px_20px_rgba(255,200,0,0.25)] hover:shadow-[0_6px_25px_rgba(255,200,0,0.35)] hover:-translate-y-0.5"
         >
           Отправить
         </button>
@@ -229,53 +240,63 @@ onMounted(async () => {
       </div>
 
       <!-- Recent Submissions (User Tracks) -->
-      <div v-if="tracks.length > 0" class="space-y-3">
-        <h3 class="text-tg-hint text-sm font-medium uppercase tracking-wider ml-1">Мои треки ({{ tracks.length }})</h3>
+      <div v-if="tracks.length > 0" class="space-y-4">
+        <h3 class="text-gray-500 text-xs font-bold uppercase tracking-widest ml-2 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-brand-yellow"></span>
+            Мои треки ({{ tracks.length }})
+        </h3>
         <div class="space-y-3">
           
-          <div v-for="track in tracks" :key="track.id" class="relative overflow-hidden rounded-xl group touch-pan-y shadow-sm">
+          <div v-for="track in tracks" :key="track.id" class="relative overflow-hidden rounded-2xl group touch-pan-y shadow-sm">
              
               <!-- Delete Background (Only for PENDING) -->
-              <div v-if="track.status === 'PENDING'" class="absolute inset-0 bg-red-500 flex items-center justify-end px-6 rounded-xl">
-                  <span class="text-white font-bold tracking-wider uppercase text-xs">Удалить</span>
+              <div v-if="track.status === 'PENDING'" class="absolute inset-0 bg-red-500/90 flex items-center justify-end px-7 backdrop-blur-sm">
+                  <!-- Trash Icon -->
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 text-white">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                  </svg>
               </div>
 
               <!-- Content -->
-              <div class="bg-tg-secondary p-4 relative z-10 transition-transform duration-200"
+              <div class="bg-brand-gray p-5 relative z-10 transition-transform duration-200 border border-white/5 rounded-2xl"
                    :class="{'translate-x-[-80px]': swipedTrackId === track.id}"
                    @touchstart="onTouchStart($event, track.id)" @touchend="onTouchEnd($event, track.id)"
                    @click="startEdit(track)">
                  
                  <!-- View Mode -->
                  <div v-if="editingTrack?.id !== track.id">
-                    <div class="flex justify-between items-start">
-                       <div class="flex-1 min-w-0 pr-3">
-                          <p class="font-bold text-lg truncate">{{ track.title }}</p>
-                          <p class="text-base text-tg-hint truncate">{{ track.artist }}</p>
-                          <a :href="track.url" target="_blank" class="text-xs text-tg-link truncate block mt-1 opacity-70" @click.stop>{{ track.url }}</a>
+                    <div class="flex justify-between items-start gap-4">
+                       <!-- Icon/Status Indicator -->
+                       <div class="shrink-0 mt-1">
+                          <div class="w-10 h-10 rounded-full flex items-center justify-center bg-brand-dark border border-white/10 shadow-inner">
+                              <span v-if="track.status === 'PROCESSED'" class="text-base">✅</span>
+                              <span v-else class="text-lg animate-pulse">⏳</span>
+                          </div>
                        </div>
-                       
-                       <!-- Status Icon -->
-                       <div class="shrink-0 flex flex-col items-center space-y-1">
-                          <span v-if="track.status === 'PROCESSED'" title="Добавлен в плейлист" class="text-xl">✅</span>
-                          <span v-else title="Ожидает" class="text-xl opacity-20">⏳</span>
+
+                       <div class="flex-1 min-w-0">
+                          <p class="font-bold text-lg text-white truncate leading-tight">{{ track.title }}</p>
+                          <p class="text-sm text-gray-400 truncate mt-0.5">{{ track.artist }}</p>
+                          <a :href="track.url" target="_blank" class="inline-flex items-center gap-1 text-[10px] text-brand-yellow/80 hover:text-brand-yellow font-bold uppercase tracking-wider mt-2 px-2 py-1 bg-brand-yellow/10 rounded-md transition-colors" @click.stop>
+                              <span>LINK ↗</span>
+                          </a>
                        </div>
                     </div>
                  </div>
 
                  <!-- Edit Mode (Only for PENDING) -->
                  <div v-else class="space-y-3" @click.stop>
-                    <div v-if="track.status === 'PROCESSED'" class="text-center text-tg-hint py-2 text-sm">
-                       Этот трек уже в плейлисте, редактирование недоступно.
-                       <button @click="editingTrack=null" class="block w-full mt-2 text-tg-link">Закрыть</button>
+                    <div v-if="track.status === 'PROCESSED'" class="text-center text-gray-500 py-2 text-sm">
+                       Этот трек уже в плейлисте
+                       <button @click="editingTrack=null" class="block w-full mt-2 text-brand-yellow hover:underline">Закрыть</button>
                     </div>
                     <div v-else class="space-y-2">
-                      <input v-model="editingTrack.artist" class="w-full p-2 rounded-lg bg-tg-bg border-none" placeholder="Исполнитель">
-                      <input v-model="editingTrack.title" class="w-full p-2 rounded-lg bg-tg-bg border-none" placeholder="Название">
-                      <input v-model="editingTrack.url" class="w-full p-2 rounded-lg bg-tg-bg border-none" placeholder="Ссылка">
+                      <input v-model="editingTrack.artist" class="w-full p-3 rounded-xl bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none text-sm" placeholder="Исполнитель">
+                      <input v-model="editingTrack.title" class="w-full p-3 rounded-xl bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none text-sm" placeholder="Название">
+                      <input v-model="editingTrack.url" class="w-full p-3 rounded-xl bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none text-sm" placeholder="Ссылка">
                       <div class="flex gap-2 pt-1">
-                         <button @click="editingTrack=null" class="flex-1 py-2 text-xs font-bold bg-gray-100 rounded-lg text-gray-500">Отмена</button>
-                         <button @click="saveEdit" class="flex-1 py-2 text-xs font-bold bg-tg-button text-white rounded-lg">Сохранить</button>
+                         <button @click="editingTrack=null" class="flex-1 py-3 text-xs font-bold bg-brand-dark rounded-xl text-gray-400 hover:text-white transition-colors">Отмена</button>
+                         <button @click="saveEdit" class="flex-1 py-3 text-xs font-bold bg-brand-yellow text-brand-dark rounded-xl shadow-lg hover:bg-yellow-400 transition-colors">Сохранить</button>
                       </div>
                     </div>
                  </div>
@@ -290,15 +311,17 @@ onMounted(async () => {
           </div>
 
         </div>
-        <p class="text-center text-xs text-tg-hint mt-6 opacity-40">Свайпни влево удалить • Нажми изменить</p>
+        <p class="text-center text-[10px] text-gray-600 mt-8 font-medium tracking-widest uppercase">Свайпни влево для удаления</p>
       </div>
 
     </div>
 
     <!-- Error State -->
-    <div v-else class="flex flex-col items-center justify-center h-screen text-center p-6 bg-red-50 rounded-lg">
-      <p class="text-red-600 font-bold text-xl">Нет доступа</p>
-      <p class="text-red-400 mt-2">Пожалуйста, откройте приложение через Telegram.</p>
+    <!-- Error State -->
+    <div v-else class="flex flex-col items-center justify-center h-screen text-center p-6 text-white">
+      <div class="text-6xl mb-4">⚠️</div>
+      <p class="font-bold text-xl mb-2">Нет доступа</p>
+      <p class="text-gray-400 text-sm max-w-[200px]">Откройте приложение через Telegram.</p>
     </div>
   </div>
 </template>

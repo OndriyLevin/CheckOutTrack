@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
@@ -55,7 +56,7 @@ app.post('/api/auth', async (req, res) => {
         res.json(user);
     } catch (error) {
         console.error('Auth Error:', error);
-        res.status(500).json({ error: 'Authentication failed' });
+        res.status(500).json({ error: 'Auth failed: ' + error.message });
     }
 });
 
@@ -212,6 +213,146 @@ app.put('/api/admin/playlists/:id', async (req, res) => {
         data: { serviceUrl }
     });
     res.json(updated);
+});
+
+// POST /api/admin/playlists/:id/export/yandex
+app.post('/api/admin/playlists/:id/export/yandex', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    const yandexToken = req.headers['x-yandex-token'];
+
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+    if (!yandexToken) return res.status(400).json({ error: 'Missing Yandex Token' });
+
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+        if (!admin?.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+        const playlist = await prisma.playlist.findUnique({
+            where: { id: Number(req.params.id) },
+            include: { tracks: true }
+        });
+        if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+
+        // Create Axios instance with custom agent to prevent socket disconnects
+        const httpsAgent = new (require('https').Agent)({ keepAlive: true });
+        const yandexApi = axios.create({
+            httpsAgent,
+            timeout: 30000 // 30 seconds timeout
+        });
+
+        // 1. Get Yandex User ID (UID)
+        const statusRes = await yandexApi.get('https://api.music.yandex.net/account/status', {
+            headers: { 'Authorization': `OAuth ${yandexToken}` }
+        });
+        const uid = statusRes.data.result?.account?.uid;
+        if (!uid) {
+            console.error('Yandex Auth Failed:', statusRes.data);
+            return res.status(400).json({ error: 'Invalid Yandex Token' });
+        }
+
+        // 2. Create Playlist on Yandex
+        const createParams = new URLSearchParams();
+        createParams.append('title', playlist.title);
+        createParams.append('visibility', 'public');
+
+        const createRes = await yandexApi.post(`https://api.music.yandex.net/users/${uid}/playlists/create`, createParams, {
+            headers: {
+                'Authorization': `OAuth ${yandexToken}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            }
+        });
+
+        if (!createRes.data.result) {
+            return res.status(500).json({ error: 'Failed to create Yandex playlist' });
+        }
+        const yandexKind = createRes.data.result.kind; // Playlist ID (kind)
+        const revision = createRes.data.result.revision; // Required for modification
+
+        // 3. Search and Add Tracks
+        const addedTracks = [];
+        const notFound = [];
+        const diff = [];
+
+        for (const track of playlist.tracks) {
+            try {
+                const query = `${track.artist} - ${track.title}`;
+                const searchRes = await yandexApi.get(`https://api.music.yandex.net/search`, {
+                    params: { text: query, type: 'track', page: 0 },
+                    headers: { 'Authorization': `OAuth ${yandexToken}` }
+                });
+
+                const bestMatch = searchRes.data.result?.tracks?.results?.[0];
+                if (bestMatch) {
+                    const trackObj = { id: String(bestMatch.id) };
+                    if (bestMatch.albums?.[0]?.id) {
+                        trackObj.albumId = String(bestMatch.albums[0].id);
+                    }
+
+                    diff.push({
+                        op: 'insert',
+                        tracks: [trackObj],
+                        at: addedTracks.length
+                    });
+                    addedTracks.push(track.title);
+                } else {
+                    notFound.push(track.title);
+                }
+            } catch (err) {
+                console.error(`Search error for ${track.title}:`, err.message);
+                notFound.push(track.title + ' (Error)');
+            }
+        }
+
+        // 4. Submit Batch
+        let batchResponseData = null;
+        if (diff.length > 0) {
+            const diffJson = JSON.stringify(diff);
+            console.log('Sending Diff:', diffJson);
+
+            const batchParams = new URLSearchParams();
+            batchParams.append('diff', diffJson);
+            batchParams.append('revision', String(revision));
+
+            try {
+                const batchRes = await yandexApi.post(`https://api.music.yandex.net/users/${uid}/playlists/${yandexKind}/change-relative`, batchParams, {
+                    headers: {
+                        'Authorization': `OAuth ${yandexToken}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                });
+                batchResponseData = batchRes.data;
+                console.log('Batch Add Response:', batchResponseData);
+            } catch (batchErr) {
+                console.error('Batch Add Failed:', batchErr.response?.data || batchErr.message);
+                batchResponseData = { error: batchErr.response?.data || batchErr.message };
+            }
+        } else {
+            console.log('No tracks found to add.');
+        }
+
+        // 5. Update local playlist Service URL
+        const serviceUrl = `https://music.yandex.ru/users/${uid}/playlists/${yandexKind}`;
+        await prisma.playlist.update({
+            where: { id: playlist.id },
+            data: { serviceUrl }
+        });
+
+        res.json({
+            success: true,
+            serviceUrl,
+            added: addedTracks.length,
+            notFound,
+            debug: {
+                diffLength: diff.length,
+                batchResponse: batchResponseData,
+                revision: revision
+            }
+        });
+
+    } catch (e) {
+        console.error('Yandex Export Error:', e.response?.data || e.message);
+        res.status(500).json({ error: e.message + (e.response?.data ? ' - ' + JSON.stringify(e.response.data) : '') });
+    }
 });
 
 // PUT /api/admin/tracks/:id - Edit track
