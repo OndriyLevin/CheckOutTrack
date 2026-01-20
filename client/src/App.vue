@@ -9,7 +9,8 @@ const tracks = ref([])
 const form = ref({
   artist: '',
   title: '',
-  url: ''
+  url: '',
+  coverUrl: ''
 })
 const loading = ref(true)
 const statusMsg = ref('')
@@ -38,6 +39,7 @@ watch(() => form.value.url, (newVal) => {
                 if (res.data.artist || res.data.title) {
                     if (res.data.artist) form.value.artist = res.data.artist;
                     if (res.data.title) form.value.title = res.data.title;
+                    if (res.data.coverUrl) form.value.coverUrl = res.data.coverUrl;
                     isLocked.value = true; // Lock if found
                     showStatus('✅ Info found!', 'success');
                 } else {
@@ -88,7 +90,7 @@ const submitTrack = async () => {
       userId: dbUser.value.id
     })
     tracks.value.unshift(res.data)
-    form.value = { artist: '', title: '', url: '' }
+    form.value = { artist: '', title: '', url: '', coverUrl: '' }
     showStatus('Track submitted successfully!')
   } catch (e) {
     console.error(e)
@@ -130,13 +132,6 @@ const onMouseUp = (e, id) => {
   }
 }
 
-const handleTrackClick = (track) => {
-  if (isClickSuppressed.value) {
-    isClickSuppressed.value = false
-    return
-  }
-  startEdit(track)
-}
 
 const startEdit = (track) => { 
   if (track.status === 'PROCESSED') return 
@@ -179,16 +174,16 @@ onMounted(async () => {
     tg.ready()
     tg.expand()
     user.value = tg.initDataUnsafe?.user
+  }
 
-    if (user.value) {
-      try {
-        const res = await axios.post('/api/auth', user.value)
-        dbUser.value = res.data
-        fetchMyTracks()
-      } catch (e) {
-        console.error("Auth failed", e)
-        showStatus('Error: ' + (e.response?.data?.error || e.message), 'error')
-      }
+  if (user.value) {
+    try {
+      const res = await axios.post('/api/auth', user.value)
+      dbUser.value = res.data
+      fetchMyTracks()
+    } catch (e) {
+      console.error("Auth failed", e)
+      showStatus('Error: ' + (e.response?.data?.error || e.message), 'error')
     }
   }
   loading.value = false
@@ -320,35 +315,55 @@ onMounted(async () => {
               </div>
 
               <!-- Content -->
-              <div class="bg-brand-gray p-5 relative z-10 transition-transform duration-200 border border-white/5 rounded-2xl select-none cursor-grab active:cursor-grabbing"
+              <div class="bg-brand-gray relative z-10 transition-transform duration-200 border border-white/5 rounded-2xl select-none cursor-grab active:cursor-grabbing overflow-hidden group"
                    :class="{'translate-x-[-80px]': swipedTrackId === track.id}"
                    @touchstart="onTouchStart($event, track.id)" @touchend="onTouchEnd($event, track.id)"
-                   @mousedown="onMouseDown" @mouseup="onMouseUp($event, track.id)"
-                   @click="handleTrackClick(track)">
+                   @mousedown="onMouseDown" @mouseup="onMouseUp($event, track.id)">
                  
                  <!-- View Mode -->
-                 <div v-if="editingTrack?.id !== track.id">
-                    <div class="flex justify-between items-start gap-4">
-                       <!-- Icon/Status Indicator -->
-                       <div class="shrink-0 mt-1">
-                          <div class="w-10 h-10 rounded-full flex items-center justify-center bg-brand-dark border border-white/10 shadow-inner">
-                              <span v-if="track.status === 'PROCESSED'" class="text-base">✅</span>
-                              <span v-else class="text-lg animate-pulse">⏳</span>
-                          </div>
-                       </div>
+                  <!-- View Mode -->
+                  <div v-if="editingTrack?.id !== track.id" class="flex h-full min-h-[6rem]"> <!-- min-h-24 -->
+                     <!-- Cover Image (Full Height Left) -->
+                     <div class="w-24 shrink-0 relative border-r border-white/5 bg-brand-dark flex items-center justify-center">
+                        <img v-if="track.coverUrl" :src="track.coverUrl" class="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity" alt="Cover" />
+                        <!-- Fallback Icon -->
+                        <div v-else class="text-2xl animate-pulse">
+                            <span v-if="track.status === 'PROCESSED'">✅</span>
+                            <span v-else>⏳</span>
+                        </div>
+                     </div>
 
-                       <div class="flex-1 min-w-0">
-                          <p class="font-bold text-lg text-white truncate leading-tight">{{ track.title }}</p>
-                          <p class="text-sm text-gray-400 truncate mt-0.5">{{ track.artist }}</p>
-                          <a :href="track.url" target="_blank" class="inline-flex items-center gap-1 text-[10px] text-brand-yellow/80 hover:text-brand-yellow font-bold uppercase tracking-wider mt-2 px-2 py-1 bg-brand-yellow/10 rounded-md transition-colors" @click.stop>
-                              <span>LINK ↗</span>
-                          </a>
-                       </div>
-                    </div>
-                 </div>
+                     <!-- Content -->
+                     <div class="flex-1 p-4 flex flex-col justify-center min-w-0">
+                         <div class="flex justify-between items-center gap-3">
+                             <div class="flex-1 min-w-0">
+                                <p class="font-bold text-lg text-white truncate leading-tight">{{ track.title }}</p>
+                                <p class="text-sm text-gray-400 truncate mt-1">{{ track.artist }}</p>
+                                <a :href="track.url" target="_blank" class="inline-flex items-center gap-1 text-[10px] text-brand-yellow/80 hover:text-brand-yellow font-bold uppercase tracking-wider mt-2.5 px-2 py-1 bg-brand-yellow/10 rounded-md transition-colors" @click.stop>
+                                    <span>LINK ↗</span>
+                                </a>
+                             </div>
 
-                 <!-- Edit Mode (Only for PENDING) -->
-                 <div v-else class="space-y-3" @click.stop>
+                             <!-- Actions -->
+                             <div class="flex items-center gap-1 shrink-0 mt-0.5">
+                                <button v-if="track.status === 'PENDING'" @click.stop="startEdit(track)" class="p-2.5 text-gray-400 hover:text-white bg-white/5 rounded-xl hover:bg-white/10 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                    </svg>
+                                </button>
+                                
+                                <button v-if="track.status === 'PENDING'" @click.stop="deleteTrack(track.id)" class="hidden md:flex p-2.5 text-red-400 hover:text-red-300 bg-red-500/10 rounded-xl hover:bg-red-500/20 transition-colors">
+                                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                   </svg>
+                                </button>
+                             </div>
+                         </div>
+                     </div>
+                  </div>
+
+                  <!-- Edit Mode (Only for PENDING) -->
+                  <div v-else class="space-y-3 p-5" @click.stop>
                     <div v-if="track.status === 'PROCESSED'" class="text-center text-gray-500 py-2 text-sm">
                        Этот трек уже в плейлисте
                        <button @click="editingTrack=null" class="block w-full mt-2 text-brand-yellow hover:underline">Закрыть</button>
@@ -357,10 +372,15 @@ onMounted(async () => {
                       <input v-model="editingTrack.artist" class="w-full p-3 rounded-xl bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none text-sm" placeholder="Исполнитель">
                       <input v-model="editingTrack.title" class="w-full p-3 rounded-xl bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none text-sm" placeholder="Название">
                       <input v-model="editingTrack.url" class="w-full p-3 rounded-xl bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none text-sm" placeholder="Ссылка">
-                      <div class="flex gap-2 pt-1">
-                         <button @click="editingTrack=null" class="flex-1 py-3 text-xs font-bold bg-brand-dark rounded-xl text-gray-400 hover:text-white transition-colors">Отмена</button>
-                         <button @click="saveEdit" class="flex-1 py-3 text-xs font-bold bg-brand-yellow text-brand-dark rounded-xl shadow-lg hover:bg-yellow-400 transition-colors">Сохранить</button>
-                      </div>
+                       <div class="flex gap-2 pt-1">
+                          <button @click="deleteTrack(track.id)" class="px-4 py-3 text-xs font-bold bg-red-500/10 text-red-400 rounded-xl hover:bg-red-500/20 transition-colors">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                              </svg>
+                          </button>
+                          <button @click="editingTrack=null" class="flex-1 py-3 text-xs font-bold bg-brand-dark rounded-xl text-gray-400 hover:text-white transition-colors">Отмена</button>
+                          <button @click="saveEdit" class="flex-1 py-3 text-xs font-bold bg-brand-yellow text-brand-dark rounded-xl shadow-lg hover:bg-yellow-400 transition-colors">Сохранить</button>
+                       </div>
                     </div>
                  </div>
               </div>

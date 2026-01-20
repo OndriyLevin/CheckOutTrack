@@ -221,30 +221,57 @@ onMounted(() => {
                     </svg>
                 </div>
                 
-                <div class="bg-brand-gray p-4 relative z-10 transition-transform duration-200 border border-white/5 rounded-xl"
+                <div class="bg-brand-gray relative z-10 transition-transform duration-200 border border-white/5 rounded-xl overflow-hidden group"
                      :class="{'translate-x-[-80px]': swipedTrackId === track.id}"
-                     @touchstart="onTouchStart($event, track.id)" @touchend="onTouchEnd($event, track.id)"
-                     @click="startEdit(track)">
+                     @touchstart="onTouchStart($event, track.id)" @touchend="onTouchEnd($event, track.id)">
                    
-                   <div v-if="editingTrack?.id !== track.id">
-                      <div class="flex justify-between items-start gap-3">
-                         <div class="flex-1 min-w-0">
-                            <p class="font-bold text-base text-white truncate">{{ track.title }}</p>
-                            <p class="text-xs text-gray-400 truncate">{{ track.artist }}</p>
-                            <a :href="track.url" target="_blank" class="text-[10px] text-brand-yellow/70 hover:text-brand-yellow truncate block mt-1 transition-colors uppercase font-bold tracking-wider" @click.stop>{{ track.url }}</a>
+                   <!-- View Mode -->
+                   <div v-if="editingTrack?.id !== track.id" class="flex items-stretch min-h-[5rem]">
+                      <!-- Cover -->
+                      <div class="w-20 shrink-0 relative border-r border-white/5 bg-brand-dark flex items-center justify-center">
+                         <img v-if="track.coverUrl" :src="track.coverUrl" class="absolute inset-0 w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity">
+                         <div v-else class="text-xl">🎵</div>
+                      </div>
+
+                      <!-- Content -->
+                      <div class="flex-1 p-3 min-w-0 flex flex-col justify-center">
+                         <div class="flex justify-between items-center gap-3">
+                             <div class="flex-1 min-w-0">
+                                <p class="font-bold text-base text-white truncate leading-tight">{{ track.title }}</p>
+                                <p class="text-xs text-gray-400 truncate mt-0.5">{{ track.artist }}</p>
+                                <a :href="track.url" target="_blank" class="text-[10px] text-brand-yellow/70 hover:text-brand-yellow truncate block mt-1 transition-colors uppercase font-bold tracking-wider" @click.stop>LINK ↗</a>
+                             </div>
+
+                             <!-- Actions -->
+                             <div class="flex items-center gap-1 shrink-0">
+                                <button @click.stop="startEdit(track)" class="p-2 text-gray-400 hover:text-white bg-white/5 rounded-lg hover:bg-white/10 transition-colors">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                      <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                    </svg>
+                                </button>
+                                <button @click.stop="deleteTrack(track.id)" class="hidden md:flex p-2 text-red-400 hover:text-red-300 bg-red-500/10 rounded-lg hover:bg-red-500/20 transition-colors">
+                                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                      <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                   </svg>
+                                </button>
+                             </div>
                          </div>
-                         <div class="w-1 h-8 rounded bg-brand-yellow/20"></div>
                       </div>
                    </div>
+
                    <!-- Edit Form -->
-                   <div v-else class="space-y-2" @click.stop>
+                   <div v-else class="space-y-2 p-3" @click.stop>
                       <input v-model="editingTrack.artist" class="w-full text-sm p-2 rounded-lg bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none" placeholder="Artist">
                       <input v-model="editingTrack.title" class="w-full text-sm p-2 rounded-lg bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none" placeholder="Title">
-                      <input v-model="editingTrack.url" class="w-full text-xs p-2 rounded-lg bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none" placeholder="Link">
-                      <div class="flex gap-2">
-                         <button @click="editingTrack=null" class="flex-1 py-2 text-xs font-bold bg-brand-dark rounded-lg text-gray-400 hover:text-white">Отмена</button>
-                         <button @click="saveEdit" class="flex-1 py-2 text-xs font-bold bg-brand-yellow text-brand-dark rounded-lg hover:bg-yellow-400">Сохранить</button>
-                      </div>
+                       <input v-model="editingTrack.url" class="w-full text-xs p-2 rounded-lg bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none" placeholder="Link">
+                       <input v-model="editingTrack.coverUrl" class="w-full text-xs p-2 rounded-lg bg-brand-dark border border-white/10 text-white placeholder-gray-600 focus:border-brand-yellow/50 outline-none" placeholder="Cover URL">
+                       <div class="flex gap-2">
+                          <button @click="deleteTrack(track.id)" class="px-3 py-2 text-xs font-bold bg-red-500/10 text-red-400 rounded-lg hover:bg-red-500/20">
+                              🗑️
+                          </button>
+                          <button @click="editingTrack=null" class="flex-1 py-2 text-xs font-bold bg-brand-dark rounded-lg text-gray-400 hover:text-white">Отмена</button>
+                          <button @click="saveEdit" class="flex-1 py-2 text-xs font-bold bg-brand-yellow text-brand-dark rounded-lg hover:bg-yellow-400">Сохранить</button>
+                       </div>
                    </div>
                 </div>
                 <button v-if="swipedTrackId === track.id" @click.stop="deleteTrack(track.id)" class="absolute inset-y-0 right-0 w-[80px] z-20 opacity-0"></button>
@@ -302,6 +329,7 @@ onMounted(() => {
           <div class="flex-1 overflow-y-auto p-4 space-y-6">
              <div class="aspect-video bg-brand-gray/20 rounded-xl overflow-hidden relative shadow-inner border border-white/5">
                 <img v-if="selectedPlaylist.coverUrl" :src="selectedPlaylist.coverUrl" class="w-full h-full object-cover">
+                <div v-else class="w-full h-full flex items-center justify-center text-6xl opacity-20">💿</div>
              </div>
              
              <!-- Service Link -->

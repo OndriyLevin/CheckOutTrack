@@ -102,7 +102,7 @@ app.get('/api/tracks', async (req, res) => {
 // POST Track
 app.post('/api/tracks', async (req, res) => {
     try {
-        const { url, artist, title, userId } = req.body;
+        const { url, artist, title, userId, coverUrl } = req.body;
         if (!url || !artist || !title || !userId) {
             return res.status(400).json({ error: 'Missing required fields' });
         }
@@ -133,7 +133,7 @@ app.post('/api/tracks', async (req, res) => {
         }
 
         const track = await prisma.track.create({
-            data: { url, artist, title, submittedBy: { connect: { id: userId } } }
+            data: { url, artist, title, coverUrl, submittedBy: { connect: { id: userId } } }
         });
         res.json(track);
     } catch (error) {
@@ -166,8 +166,11 @@ app.post('/api/metadata', async (req, res) => {
 
         let artist = '';
         let title = '';
+        let coverUrl = '';
         let rawTitle = $('meta[property="og:title"]').attr('content') || $('title').text() || '';
         let siteName = $('meta[property="og:site_name"]').attr('content') || '';
+        let ogImage = $('meta[property="og:image"]').attr('content') || '';
+        if (ogImage) coverUrl = ogImage;
 
         console.log(`[Metadata] URL: ${url}`);
         console.log(`[Metadata] Raw Title: "${rawTitle}", Site: "${siteName}"`);
@@ -203,7 +206,8 @@ app.post('/api/metadata', async (req, res) => {
 
                         if (apiTitle && apiArtist) {
                             console.log(`[Metadata] Handler Success -> ${apiArtist} - ${apiTitle}`);
-                            return res.json({ artist: apiArtist, title: apiTitle });
+                            let apiCover = trackData.coverUri ? 'https://' + trackData.coverUri.replace('%%', '200x200') : '';
+                            return res.json({ artist: apiArtist, title: apiTitle, coverUrl: apiCover });
                         }
                     }
                 } catch (apiErr) {
@@ -259,13 +263,13 @@ app.post('/api/metadata', async (req, res) => {
         // Clean up
         if (artist.endsWith('| Spotify')) artist = artist.replace('| Spotify', '').trim();
 
-        console.log(`[Metadata] Result -> Artist: "${artist}", Title: "${title}"`);
+        console.log(`[Metadata] Result -> Artist: "${artist}", Title: "${title}", Cover: "${coverUrl}"`);
 
-        res.json({ artist, title });
+        res.json({ artist, title, coverUrl });
     } catch (error) {
         console.error('Metadata Fetch Error:', error.message);
         // If it fails (e.g. 403), return empty
-        res.json({ artist: '', title: '' });
+        res.json({ artist: '', title: '', coverUrl: '' });
     }
 });
 
@@ -308,7 +312,7 @@ app.delete('/api/tracks/:id', async (req, res) => {
 // PUT /api/tracks/:id - User edits their own track
 app.put('/api/tracks/:id', async (req, res) => {
     const userId = req.headers['x-user-id'];
-    const { artist, title, url } = req.body;
+    const { artist, title, url, coverUrl } = req.body;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
@@ -319,7 +323,7 @@ app.put('/api/tracks/:id', async (req, res) => {
 
         const updated = await prisma.track.update({
             where: { id: track.id },
-            data: { artist, title, url }
+            data: { artist, title, url, coverUrl }
         });
         res.json(updated);
     } catch (error) {
