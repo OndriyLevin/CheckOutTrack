@@ -115,6 +115,29 @@ const onTouchEnd = (e, id) => {
   else if (touchStartX.value - touchEndX < -50 && swipedTrackId.value === id) swipedTrackId.value = null
 }
 
+// Mouse Swipe Support
+const isClickSuppressed = ref(false)
+const onMouseDown = (e) => {
+  touchStartX.value = e.clientX
+  isClickSuppressed.value = false
+}
+const onMouseUp = (e, id) => {
+  const diff = touchStartX.value - e.clientX
+  if (Math.abs(diff) > 50) {
+    isClickSuppressed.value = true
+    if (diff > 50) swipedTrackId.value = id
+    else if (diff < -50 && swipedTrackId.value === id) swipedTrackId.value = null
+  }
+}
+
+const handleTrackClick = (track) => {
+  if (isClickSuppressed.value) {
+    isClickSuppressed.value = false
+    return
+  }
+  startEdit(track)
+}
+
 const startEdit = (track) => { 
   if (track.status === 'PROCESSED') return 
   editingTrack.value = { ...track }
@@ -297,10 +320,11 @@ onMounted(async () => {
               </div>
 
               <!-- Content -->
-              <div class="bg-brand-gray p-5 relative z-10 transition-transform duration-200 border border-white/5 rounded-2xl"
+              <div class="bg-brand-gray p-5 relative z-10 transition-transform duration-200 border border-white/5 rounded-2xl select-none cursor-grab active:cursor-grabbing"
                    :class="{'translate-x-[-80px]': swipedTrackId === track.id}"
                    @touchstart="onTouchStart($event, track.id)" @touchend="onTouchEnd($event, track.id)"
-                   @click="startEdit(track)">
+                   @mousedown="onMouseDown" @mouseup="onMouseUp($event, track.id)"
+                   @click="handleTrackClick(track)">
                  
                  <!-- View Mode -->
                  <div v-if="editingTrack?.id !== track.id">
@@ -350,7 +374,7 @@ onMounted(async () => {
           </div>
 
         </div>
-        <p class="text-center text-[10px] text-gray-600 mt-8 font-medium tracking-widest uppercase">Свайпни влево для удаления</p>
+        <p class="text-center text-[10px] text-gray-600 mt-8 font-medium tracking-widest uppercase">Свайпни или потяни влево для удаления</p>
       </div>
 
     </div>
