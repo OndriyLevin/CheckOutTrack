@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  server:
+    # Replace 'ondriylevin' with your actual GitHub username in lowercase if different
+    image: ghcr.io/ondriylevin/checkouttrack-server:latest
+    container_name: checkouttrack-server
+    volumes:
+      - sqlite_data:/app/data
+      - uploads_data:/app/uploads
+    environment:
+      # Preserving original DB path
+      - DATABASE_URL=file:/app/data/dev.db
+      - PORT=3000
+    env_file:
+      - .env
+    restart: always
+
+  client:
+    image: ghcr.io/ondriylevin/checkouttrack-client:latest
+    container_name: checkouttrack-client
+    ports:
+      - "8082:80"
+    depends_on:
+      - server
+    restart: always
+
+volumes:
+  sqlite_data:
+  uploads_data:
