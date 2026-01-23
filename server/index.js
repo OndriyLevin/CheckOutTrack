@@ -457,19 +457,48 @@ app.post('/api/admin/playlists/:id/export/yandex', async (req, res) => {
 
         for (const track of playlist.tracks) {
             try {
-                const query = `${track.artist} - ${track.title}`;
-                const searchRes = await yandexApi.get(`https://api.music.yandex.net/search`, {
-                    params: { text: query, type: 'track', page: 0 },
-                    headers: { 'Authorization': `OAuth ${yandexToken}` }
-                });
+                let trackObj = null;
 
-                const bestMatch = searchRes.data.result?.tracks?.results?.[0];
-                if (bestMatch) {
-                    const trackObj = { id: String(bestMatch.id) };
-                    if (bestMatch.albums?.[0]?.id) {
-                        trackObj.albumId = String(bestMatch.albums[0].id);
+                // 1. Try to extract Yandex Track ID from URL
+                const yandexMatch = track.url && track.url.match(/music\.yandex\.[a-z]+\/(?:album\/\d+\/)?track\/(\d+)/);
+                if (yandexMatch && yandexMatch[1]) {
+                    const trackId = yandexMatch[1];
+                    try {
+                        const trackInfoRes = await yandexApi.get(`https://api.music.yandex.net/tracks/${trackId}`, {
+                            headers: { 'Authorization': `OAuth ${yandexToken}` }
+                        });
+                        // API returns result: [ { id: ... } ]
+                        const info = trackInfoRes.data.result?.[0];
+                        if (info && info.id) {
+                            trackObj = { id: String(info.id) };
+                            if (info.albums?.[0]?.id) {
+                                trackObj.albumId = String(info.albums[0].id);
+                            }
+                            console.log(`[Export] Found by ID: ${track.title} -> ${info.id}`);
+                        }
+                    } catch (idErr) {
+                        console.warn(`[Export] Failed to resolve ID ${trackId} for ${track.title}: ${idErr.message}`);
                     }
+                }
 
+                // 2. Fallback: Search by Artist - Title
+                if (!trackObj) {
+                    const query = `${track.artist} - ${track.title}`;
+                    const searchRes = await yandexApi.get(`https://api.music.yandex.net/search`, {
+                        params: { text: query, type: 'track', page: 0 },
+                        headers: { 'Authorization': `OAuth ${yandexToken}` }
+                    });
+
+                    const bestMatch = searchRes.data.result?.tracks?.results?.[0];
+                    if (bestMatch) {
+                        trackObj = { id: String(bestMatch.id) };
+                        if (bestMatch.albums?.[0]?.id) {
+                            trackObj.albumId = String(bestMatch.albums[0].id);
+                        }
+                    }
+                }
+
+                if (trackObj) {
                     diff.push({
                         op: 'insert',
                         tracks: [trackObj],
@@ -484,91 +513,96 @@ app.post('/api/admin/playlists/:id/export/yandex', async (req, res) => {
                 notFound.push(track.title + ' (Error)');
             }
         }
+    } catch (err) {
+        console.error(`Search error for ${track.title}:`, err.message);
+        notFound.push(track.title + ' (Error)');
+    }
+}
 
         // 4. Submit Batch
         let batchResponseData = null;
-        if (diff.length > 0) {
-            const diffJson = JSON.stringify(diff);
-            console.log('Sending Diff:', diffJson);
+if (diff.length > 0) {
+    const diffJson = JSON.stringify(diff);
+    console.log('Sending Diff:', diffJson);
 
-            const batchParams = new URLSearchParams();
-            batchParams.append('diff', diffJson);
-            batchParams.append('revision', String(revision));
+    const batchParams = new URLSearchParams();
+    batchParams.append('diff', diffJson);
+    batchParams.append('revision', String(revision));
 
-            try {
-                const batchRes = await yandexApi.post(`https://api.music.yandex.net/users/${uid}/playlists/${yandexKind}/change-relative`, batchParams, {
-                    headers: {
-                        'Authorization': `OAuth ${yandexToken}`,
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    }
-                });
-                batchResponseData = batchRes.data;
-                console.log('Batch Add Response:', batchResponseData);
-            } catch (batchErr) {
-                console.error('Batch Add Failed:', batchErr.response?.data || batchErr.message);
-                batchResponseData = { error: batchErr.response?.data || batchErr.message };
+    try {
+        const batchRes = await yandexApi.post(`https://api.music.yandex.net/users/${uid}/playlists/${yandexKind}/change-relative`, batchParams, {
+            headers: {
+                'Authorization': `OAuth ${yandexToken}`,
+                'Content-Type': 'application/x-www-form-urlencoded'
             }
-        } else {
-            console.log('No tracks found to add.');
-        }
+        });
+        batchResponseData = batchRes.data;
+        console.log('Batch Add Response:', batchResponseData);
+    } catch (batchErr) {
+        console.error('Batch Add Failed:', batchErr.response?.data || batchErr.message);
+        batchResponseData = { error: batchErr.response?.data || batchErr.message };
+    }
+} else {
+    console.log('No tracks found to add.');
+}
 
-        // 5. Upload Cover (if exists)
-        if (playlist.coverUrl) {
-            try {
-                console.log('Attempting to upload cover...');
-                // Resolve local path
-                const filename = path.basename(playlist.coverUrl);
-                const filePath = path.join(__dirname, 'uploads', filename);
+// 5. Upload Cover (if exists)
+if (playlist.coverUrl) {
+    try {
+        console.log('Attempting to upload cover...');
+        // Resolve local path
+        const filename = path.basename(playlist.coverUrl);
+        const filePath = path.join(__dirname, 'uploads', filename);
 
-                if (fs.existsSync(filePath)) {
-                    const FormData = require('form-data');
-                    const form = new FormData();
-                    form.append('image', fs.createReadStream(filePath)); // Try 'image' as field name
+        if (fs.existsSync(filePath)) {
+            const FormData = require('form-data');
+            const form = new FormData();
+            form.append('image', fs.createReadStream(filePath)); // Try 'image' as field name
 
-                    // Post directly to Yandex
-                    // Note: Yandex API often expects 'file' parameter
-                    await yandexApi.post(`https://api.music.yandex.net/users/${uid}/playlists/${yandexKind}/cover/upload`, form, {
-                        headers: {
-                            'Authorization': `OAuth ${yandexToken}`,
-                            ...form.getHeaders()
-                        },
-                        params: {
-                            revision: revision // Might differ if cover updates revision? Safe to try.
-                        }
-                    });
-
-                    console.log('Cover uploaded successfully!');
-                } else {
-                    console.warn('Local cover file not found:', filePath);
+            // Post directly to Yandex
+            // Note: Yandex API often expects 'file' parameter
+            await yandexApi.post(`https://api.music.yandex.net/users/${uid}/playlists/${yandexKind}/cover/upload`, form, {
+                headers: {
+                    'Authorization': `OAuth ${yandexToken}`,
+                    ...form.getHeaders()
+                },
+                params: {
+                    revision: revision // Might differ if cover updates revision? Safe to try.
                 }
-            } catch (coverErr) {
-                console.error('Cover Upload Failed:', coverErr.message, coverErr.response?.data);
-            }
+            });
+
+            console.log('Cover uploaded successfully!');
+        } else {
+            console.warn('Local cover file not found:', filePath);
         }
+    } catch (coverErr) {
+        console.error('Cover Upload Failed:', coverErr.message, coverErr.response?.data);
+    }
+}
 
-        // 5. Update local playlist Service URL
-        const serviceUrl = `https://music.yandex.ru/users/${uid}/playlists/${yandexKind}`;
-        await prisma.playlist.update({
-            where: { id: playlist.id },
-            data: { serviceUrl }
-        });
+// 5. Update local playlist Service URL
+const serviceUrl = `https://music.yandex.ru/users/${uid}/playlists/${yandexKind}`;
+await prisma.playlist.update({
+    where: { id: playlist.id },
+    data: { serviceUrl }
+});
 
-        res.json({
-            success: true,
-            serviceUrl,
-            added: addedTracks.length,
-            notFound,
-            debug: {
-                diffLength: diff.length,
-                batchResponse: batchResponseData,
-                revision: revision
-            }
-        });
+res.json({
+    success: true,
+    serviceUrl,
+    added: addedTracks.length,
+    notFound,
+    debug: {
+        diffLength: diff.length,
+        batchResponse: batchResponseData,
+        revision: revision
+    }
+});
 
     } catch (e) {
-        console.error('Yandex Export Error:', e.response?.data || e.message);
-        res.status(500).json({ error: e.message + (e.response?.data ? ' - ' + JSON.stringify(e.response.data) : '') });
-    }
+    console.error('Yandex Export Error:', e.response?.data || e.message);
+    res.status(500).json({ error: e.message + (e.response?.data ? ' - ' + JSON.stringify(e.response.data) : '') });
+}
 });
 
 // PUT /api/admin/tracks/:id - Edit track
