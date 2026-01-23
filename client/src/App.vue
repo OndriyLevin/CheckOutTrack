@@ -219,7 +219,7 @@ onMounted(async () => {
         </h1>
         <p class="text-gray-400 text-sm font-medium leading-relaxed max-w-[280px] mx-auto">
           Йо, <span class="text-white font-bold">{{ user.first_name }}</span>! <br>
-          Закидывай свои любимые треки в наш общий плейлист.
+          Закидывай свои любимые треки в общий плейлист.
         </p>
 
         <!-- Admin Toggle Button -->
