@@ -9,13 +9,14 @@
     "db:push": "prisma db push"
   },
   "dependencies": {
+    "@prisma/client": "^5.7.0",
     "axios": "^1.6.2",
     "cheerio": "1.0.0-rc.10",
-    "@prisma/client": "^5.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "multer": "^2.0.2",
+    "sharp": "^0.34.5",
     "yandex-music-client": "^0.4.3"
   },
   "devDependencies": {

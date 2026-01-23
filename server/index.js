@@ -6,6 +6,7 @@ require('dotenv').config();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const sharp = require('sharp');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -611,7 +612,7 @@ app.delete('/api/admin/tracks/:id', async (req, res) => {
 app.post('/api/admin/playlists', upload.single('cover'), async (req, res) => {
     const adminId = req.headers['x-admin-id'];
     const { title } = req.body;
-    const file = req.file;
+    let file = req.file;
 
     if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
 
@@ -622,7 +623,34 @@ app.post('/api/admin/playlists', upload.single('cover'), async (req, res) => {
         const pendingTracks = await prisma.track.findMany({ where: { status: 'PENDING' }, select: { id: true } });
         if (pendingTracks.length === 0) return res.status(400).json({ error: 'No tracks to playlist' });
 
-        const coverUrl = file ? `/uploads/${file.filename}` : null;
+        // Process Cover Image (Convert to JPEG & Resize)
+        let coverUrl = null;
+        if (file) {
+            try {
+                const originalPath = file.path;
+                const newFilename = path.parse(file.filename).name + '.jpg';
+                const newPath = path.join(uploadDir, newFilename);
+
+                await sharp(originalPath)
+                    .resize(500, 500, { fit: 'cover' })
+                    .jpeg({ quality: 80 })
+                    .toFile(newPath);
+
+                console.log(`[Image] Converted ${file.filename} to ${newFilename}`);
+
+                // Remove original file if it's different (e.g. was png)
+                // If original was already jpg matching new name, sharp writes to a temp file then renames, usually safe but check docs. 
+                // However, multer gives random names mostly without ext or with. 
+                // Let's assume we delete the multer file after successful conversion.
+                fs.unlinkSync(originalPath);
+
+                coverUrl = `/uploads/${newFilename}`;
+            } catch (imgErr) {
+                console.error('Image processing failed:', imgErr);
+                // Fallback to original if conversion fails (though unlikely)
+                coverUrl = `/uploads/${file.filename}`;
+            }
+        }
 
         const result = await prisma.$transaction(async (tx) => {
             const playlist = await tx.playlist.create({
