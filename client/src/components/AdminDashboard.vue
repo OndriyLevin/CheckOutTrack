@@ -135,6 +135,17 @@ const deleteTrack = async (id) => {
 
 // create playlist
 const handleFileUpload = (e) => { playlistForm.value.coverFile = e.target.files[0] }
+// Helper for images
+const getImageUrl = (url) => {
+    if (!url) return '';
+    if (url.startsWith('/uploads')) {
+        return `/music${url}`;
+    }
+    return url;
+}
+
+// ... existing code ...
+
 const createPlaylist = async () => {
   if (!playlistForm.value.title) return alert('Дайте название')
   if (!confirm('Создать плейлист из ' + tracks.value.length + ' треков?')) return
@@ -151,8 +162,14 @@ const createPlaylist = async () => {
     playlistForm.value = { title: '', coverFile: null }
     activeTab.value = 'playlists'
     fetchPlaylists()
-  } catch (e) { console.error(e); alert('Ошибка') }
+  } catch (e) { 
+      console.error(e); 
+      alert('Ошибка: ' + (e.response?.data?.error || e.message));
+  }
 }
+
+// ... existing code ...
+
 
 const deletePlaylist = async (id) => {
     if (!confirm('Удалить плейлист?')) return
@@ -286,7 +303,7 @@ onMounted(() => {
        <div v-for="pl in playlists" :key="pl.id" @click="openPlaylistDetails(pl.id)" 
             class="bg-brand-gray/20 border border-white/5 rounded-2xl overflow-hidden shadow-lg active:opacity-80 transition-all hover:border-brand-yellow/30">
           <div class="aspect-video bg-gray-200 relative">
-             <img v-if="pl.coverUrl" :src="pl.coverUrl" class="w-full h-full object-cover">
+             <img v-if="pl.coverUrl" :src="getImageUrl(pl.coverUrl)" class="w-full h-full object-cover">
              <div v-else class="absolute inset-0 flex items-center justify-center text-tg-hint opacity-30 font-bold text-4xl">🎵</div>
              <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 pt-10">
                 <h3 class="text-white font-bold text-lg truncate">{{ pl.title }}</h3>
@@ -328,7 +345,7 @@ onMounted(() => {
           
           <div class="flex-1 overflow-y-auto p-4 space-y-6">
              <div class="aspect-video bg-brand-gray/20 rounded-xl overflow-hidden relative shadow-inner border border-white/5">
-                <img v-if="selectedPlaylist.coverUrl" :src="selectedPlaylist.coverUrl" class="w-full h-full object-cover">
+                <img v-if="selectedPlaylist.coverUrl" :src="getImageUrl(selectedPlaylist.coverUrl)" class="w-full h-full object-cover">
                 <div v-else class="w-full h-full flex items-center justify-center text-6xl opacity-20">💿</div>
              </div>
              
