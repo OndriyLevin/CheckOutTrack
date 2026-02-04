@@ -2,6 +2,8 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import axios from 'axios'
 import AdminDashboard from './components/AdminDashboard.vue'
+import UserPlaylists from './components/UserPlaylists.vue'
+import PlaylistDetail from './components/PlaylistDetail.vue'
 
 const user = ref(null)
 const dbUser = ref(null)
@@ -15,6 +17,9 @@ const form = ref({
 const loading = ref(true)
 const statusMsg = ref('')
 const statusType = ref('') 
+
+const currentTab = ref('submit') // 'submit', 'playlists'
+const selectedPlaylistId = ref(null) 
 
 const showAdmin = ref(false)
 const editingTrack = ref(null)
@@ -234,6 +239,40 @@ onMounted(async () => {
 
       </header>
 
+      <!-- Navigation Tabs -->
+      <div v-if="!showAdmin" class="flex p-1 bg-brand-gray/50 rounded-2xl backdrop-blur-md border border-white/5">
+          <button 
+             @click="currentTab = 'submit'; selectedPlaylistId = null"
+             class="flex-1 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all"
+             :class="currentTab === 'submit' ? 'bg-brand-yellow text-brand-dark shadow-lg' : 'text-gray-400 hover:text-white'"
+          >
+             Отправить
+          </button>
+          <button 
+             @click="currentTab = 'playlists'"
+             class="flex-1 py-2.5 rounded-xl text-sm font-bold uppercase tracking-wider transition-all"
+             :class="currentTab === 'playlists' ? 'bg-brand-yellow text-brand-dark shadow-lg' : 'text-gray-400 hover:text-white'"
+          >
+             Плейлисты
+          </button>
+      </div>
+
+      <!-- PLAYLISTS VIEW -->
+      <div v-if="currentTab === 'playlists'">
+         <PlaylistDetail 
+            v-if="selectedPlaylistId" 
+            :playlist-id="selectedPlaylistId" 
+            :user-id="dbUser?.id"
+            @back="selectedPlaylistId = null"
+         />
+         <UserPlaylists 
+            v-else 
+            @select="id => selectedPlaylistId = id" 
+         />
+      </div>
+
+      <!-- SUBMISSION VIEW -->
+      <div v-if="currentTab === 'submit'" class="space-y-6">
       <!-- Submission Form -->
       <div class="bg-brand-gray/40 backdrop-blur-md p-6 rounded-3xl border border-white/5 shadow-xl space-y-6">
         <h2 class="text-xl font-bold text-white flex items-center gap-2">
@@ -396,6 +435,7 @@ onMounted(async () => {
         </div>
         <p class="text-center text-[10px] text-gray-600 mt-8 font-medium tracking-widest uppercase">Свайпни или потяни влево для удаления</p>
       </div>
+      </div> <!-- End of Submission View -->
 
     </div>
 

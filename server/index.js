@@ -752,6 +752,200 @@ app.post('/api/test/toggle-admin', async (req, res) => {
     }
 });
 
+// --- PUBLIC/USER PLAYLISTS & LIKES ---
+
+// GET /api/playlists - List all public playlists
+app.get('/api/playlists', async (req, res) => {
+    try {
+        const playlists = await prisma.playlist.findMany({
+            orderBy: { createdAt: 'desc' },
+            include: { _count: { select: { tracks: true } } }
+        });
+        res.json(playlists);
+    } catch (error) {
+        console.error('Fetch Playlists Error:', error);
+        res.status(500).json({ error: 'Failed to fetch playlists' });
+    }
+});
+
+// GET /api/playlists/:id - Playlist Details with Like Status
+app.get('/api/playlists/:id', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    try {
+        const playlist = await prisma.playlist.findUnique({
+            where: { id: Number(req.params.id) },
+            include: {
+                tracks: {
+                    include: {
+                        submittedBy: { select: { username: true, firstName: true } },
+                        _count: { select: { likes: true } }
+                    }
+                }
+            }
+        });
+
+        if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+
+        // If user is logged in, check which tracks they liked
+        let userLikes = new Set();
+        if (userId) {
+            const likes = await prisma.like.findMany({
+                where: {
+                    userId: Number(userId),
+                    trackId: { in: playlist.tracks.map(t => t.id) }
+                }
+            });
+            likes.forEach(l => userLikes.add(l.trackId));
+        }
+
+        // Map tracks to include 'isLiked'
+        const tracksWithLikes = playlist.tracks.map(track => ({
+            ...track,
+            likesCount: track._count.likes,
+            isLiked: userLikes.has(track.id)
+        }));
+
+        res.json({ ...playlist, tracks: tracksWithLikes });
+    } catch (error) {
+        console.error('Fetch Playlist Detail Error:', error);
+        res.status(500).json({ error: 'Failed to fetch playlist details' });
+    }
+});
+
+// POST /api/tracks/:id/like - Toggle Like
+app.post('/api/tracks/:id/like', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const trackId = Number(req.params.id);
+        const uid = Number(userId);
+
+        // Check if already liked
+        const existing = await prisma.like.findUnique({
+            where: {
+                userId_trackId: { userId: uid, trackId: trackId }
+            }
+        });
+
+        if (existing) {
+            // Unlike
+            await prisma.like.delete({
+                where: {
+                    userId_trackId: { userId: uid, trackId: trackId }
+                }
+            });
+            res.json({ liked: false });
+        } else {
+            // Like
+            await prisma.like.create({
+                data: { userId: uid, trackId: trackId }
+            });
+            res.json({ liked: true });
+        }
+    } catch (error) {
+        console.error('Like Error:', error);
+        res.status(500).json({ error: 'Failed to like track' });
+    }
+});
+
+// --- PUBLIC/USER PLAYLISTS & LIKES ---
+
+// GET /api/playlists - List all public playlists
+app.get('/api/playlists', async (req, res) => {
+    try {
+        const playlists = await prisma.playlist.findMany({
+            orderBy: { createdAt: 'desc' },
+            include: { _count: { select: { tracks: true } } }
+        });
+        res.json(playlists);
+    } catch (error) {
+        console.error('Fetch Playlists Error:', error);
+        res.status(500).json({ error: 'Failed to fetch playlists' });
+    }
+});
+
+// GET /api/playlists/:id - Playlist Details with Like Status
+app.get('/api/playlists/:id', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    try {
+        const playlist = await prisma.playlist.findUnique({
+            where: { id: Number(req.params.id) },
+            include: {
+                tracks: {
+                    include: {
+                        submittedBy: { select: { username: true, firstName: true } },
+                        _count: { select: { likes: true } }
+                    }
+                }
+            }
+        });
+
+        if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+
+        // If user is logged in, check which tracks they liked
+        let userLikes = new Set();
+        if (userId) {
+            const likes = await prisma.like.findMany({
+                where: {
+                    userId: Number(userId),
+                    trackId: { in: playlist.tracks.map(t => t.id) }
+                }
+            });
+            likes.forEach(l => userLikes.add(l.trackId));
+        }
+
+        // Map tracks to include 'isLiked'
+        const tracksWithLikes = playlist.tracks.map(track => ({
+            ...track,
+            likesCount: track._count.likes,
+            isLiked: userLikes.has(track.id)
+        }));
+
+        res.json({ ...playlist, tracks: tracksWithLikes });
+    } catch (error) {
+        console.error('Fetch Playlist Detail Error:', error);
+        res.status(500).json({ error: 'Failed to fetch playlist details' });
+    }
+});
+
+// POST /api/tracks/:id/like - Toggle Like
+app.post('/api/tracks/:id/like', async (req, res) => {
+    const userId = req.headers['x-user-id'];
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const trackId = Number(req.params.id);
+        const uid = Number(userId);
+
+        // Check if already liked
+        const existing = await prisma.like.findUnique({
+            where: {
+                userId_trackId: { userId: uid, trackId: trackId }
+            }
+        });
+
+        if (existing) {
+            // Unlike
+            await prisma.like.delete({
+                where: {
+                    userId_trackId: { userId: uid, trackId: trackId }
+                }
+            });
+            res.json({ liked: false });
+        } else {
+            // Like
+            await prisma.like.create({
+                data: { userId: uid, trackId: trackId }
+            });
+            res.json({ liked: true });
+        }
+    } catch (error) {
+        console.error('Like Error:', error);
+        res.status(500).json({ error: 'Failed to like track' });
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
