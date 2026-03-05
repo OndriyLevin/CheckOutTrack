@@ -12,6 +12,7 @@ services:
       # Preserving original DB path
       - DATABASE_URL=file:/app/data/dev.db
       - PORT=3000
+      - BOT_TOKEN=${BOT_TOKEN}
     env_file:
       - .env
     restart: always

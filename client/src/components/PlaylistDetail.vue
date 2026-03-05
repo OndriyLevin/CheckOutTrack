@@ -1,8 +1,9 @@
 <template>
   <div class="space-y-6" v-if="playlist">
     <!-- Header -->
-    <div class="relative rounded-3xl overflow-hidden bg-brand-dark border border-white/5">
-       <div class="h-32 bg-cover bg-center opacity-40 blur-sm" :style="{ backgroundImage: `url(${playlist.coverUrl || '/images/logo.png'})` }"></div>
+    <div class="relative rounded-3xl overflow-hidden bg-brand-dark border border-white/5 bg-center bg-cover" :style="playlist.coverUrl ? { backgroundImage: `url(${playlist.coverUrl})` } : {}">
+       <div class="absolute inset-0 bg-brand-dark/40 backdrop-blur-sm" :class="{'bg-opacity-80': !playlist.coverUrl}"></div>
+       <div class="absolute inset-0 flex items-center justify-center opacity-30 text-6xl pointer-events-none" v-if="!playlist.coverUrl">🎵</div>
        <div class="absolute inset-0 bg-gradient-to-t from-brand-dark to-transparent"></div>
        
        <div class="absolute bottom-0 left-0 p-6 w-full flex items-end justify-between">

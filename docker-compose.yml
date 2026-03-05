@@ -11,6 +11,7 @@ services:
     environment:
       - DATABASE_URL=file:./dev.db
       - ADMIN_ID=${ADMIN_ID}
+      - BOT_TOKEN=${BOT_TOKEN}
     restart: always
 
   client:

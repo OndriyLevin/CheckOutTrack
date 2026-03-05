@@ -22,9 +22,15 @@
       >
         <div class="flex h-24">
           <!-- Cover -->
-          <div class="w-24 shrink-0 bg-black relative">
-             <img v-if="playlist.coverUrl" :src="playlist.coverUrl" class="absolute inset-0 w-full h-full object-cover" alt="Playlist Cover" />
-             <div v-else class="absolute inset-0 flex items-center justify-center text-4xl bg-brand-dark/50">🎵</div>
+          <div class="w-24 shrink-0 bg-brand-dark/50 relative flex items-center justify-center border-r border-white/5">
+             <img 
+                v-if="playlist.coverUrl" 
+                :src="playlist.coverUrl" 
+                class="absolute inset-0 w-full h-full object-cover" 
+                alt="" 
+                @error="$event.target.style.display='none'"
+             />
+             <div class="text-4xl pointer-events-none">🎵</div>
           </div>
           
           <!-- Content -->

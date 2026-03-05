@@ -11,6 +11,24 @@ const sharp = require('sharp');
 const app = express();
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
+const BOT_TOKEN = process.env.BOT_TOKEN;
+
+// Helper: Send Telegram Notification
+async function sendTelegramMessage(chatId, text) {
+    if (!BOT_TOKEN) {
+        console.warn('BOT_TOKEN is not set. Skipping Telegram notification.');
+        return;
+    }
+    try {
+        await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            chat_id: chatId,
+            text: text,
+            parse_mode: 'HTML'
+        });
+    } catch (e) {
+        console.error(`Failed to send Telegram message to ${chatId}:`, e.response?.data || e.message);
+    }
+}
 
 // Handle BigInt serialization
 BigInt.prototype.toJSON = function () { return this.toString() }
@@ -582,6 +600,28 @@ app.post('/api/admin/playlists/:id/export/yandex', async (req, res) => {
             where: { id: playlist.id },
             data: { serviceUrl }
         });
+
+        // 6. Send Telegram Notifications
+        try {
+            const users = await prisma.user.findMany({
+                where: {
+                    telegramId: {
+                        not: 0n // Or whatever valid check you have, BigInt > 0
+                    }
+                }
+            });
+
+            const message = `🎧 Вышел новый собранный плейлист: <b>${playlist.title}</b>!\n\nСлушать здесь: <a href="${serviceUrl}">Яндекс Музыка</a>\n\nНе забудь закинуть новый трек!`;
+
+            // Send in background to avoid blocking the response
+            console.log(`Sending notifications to ${users.length} users...`);
+            Promise.all(users.map(user => sendTelegramMessage(user.telegramId.toString(), message)))
+                .then(() => console.log('Successfully broadcasted to all users.'))
+                .catch(err => console.error('Error during broadcast:', err));
+
+        } catch (notifErr) {
+            console.error('Failed to fetch users for notification:', notifErr);
+        }
 
         res.json({
             success: true,
