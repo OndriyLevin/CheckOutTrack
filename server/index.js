@@ -13,7 +13,7 @@ const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
-// Helper: Send Telegram Notification
+// Helper: Send Telegram Notification .!.
 async function sendTelegramMessage(chatId, text) {
     if (!BOT_TOKEN) {
         console.warn('BOT_TOKEN is not set. Skipping Telegram notification.');
