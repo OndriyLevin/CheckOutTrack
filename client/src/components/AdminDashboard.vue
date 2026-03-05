@@ -56,6 +56,30 @@ const exportYandex = async () => {
     exporting.value = false
 }
 
+// Telegram Notify
+const notifying = ref(false)
+const notifyStatus = ref('')
+
+const notifyTelegram = async () => {
+    if (!selectedPlaylist.value?.serviceUrl) {
+        return alert('Сначала добавьте ссылку на сервис (Yandex) и сохраните её!')
+    }
+    if (!confirm('Отправить уведомление всем пользователям бота?')) return
+    
+    notifying.value = true
+    notifyStatus.value = 'Отправка...'
+    try {
+        const res = await axios.post(`/api/admin/playlists/${selectedPlaylist.value.id}/notify`, {}, {
+            headers: { 'x-admin-id': props.user.id }
+        })
+        notifyStatus.value = `Успех! Отправлено: ${res.data.count} пользователям.`
+    } catch(e) {
+        console.error(e)
+        notifyStatus.value = `Ошибка: ${e.response?.data?.error || e.message}`
+    }
+    notifying.value = false
+}
+
 // Group tracks by User (Queue)
 const groupedTracks = computed(() => {
   const groups = {}
@@ -359,7 +383,7 @@ onMounted(() => {
                 </div>
              </div>
 
-             <!-- Yandex Export -->
+              <!-- Yandex Export -->
              <div class="space-y-1 bg-brand-yellow/5 p-3 rounded-xl border border-brand-yellow/10">
                 <label class="text-[10px] font-bold text-brand-yellow uppercase ml-1 tracking-widest">Yandex Export</label>
                 <div class="flex flex-col gap-2">
@@ -371,6 +395,23 @@ onMounted(() => {
                    </button>
                    <p v-if="exportStatus" class="text-xs text-center font-bold" :class="exportStatus.startsWith('Error') ? 'text-red-400' : 'text-green-400'">
                        {{ exportStatus }}
+                   </p>
+                </div>
+             </div>
+
+             <!-- Telegram Publish -->
+             <div class="space-y-1 bg-blue-500/5 p-3 rounded-xl border border-blue-500/20">
+                <label class="text-[10px] font-bold text-blue-400 uppercase ml-1 tracking-widest">Telegram Notification</label>
+                <div class="flex flex-col gap-2">
+                   <button @click="notifyTelegram" :disabled="notifying || !selectedPlaylist.serviceUrl"
+                           class="w-full bg-blue-500 text-white py-3 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                       </svg>
+                       {{ notifying ? 'Отправка...' : 'Publish to TG' }}
+                   </button>
+                   <p v-if="notifyStatus" class="text-xs text-center font-bold" :class="notifyStatus.startsWith('Ошибка') ? 'text-red-400' : 'text-green-400'">
+                       {{ notifyStatus }}
                    </p>
                 </div>
              </div>

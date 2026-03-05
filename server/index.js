@@ -601,26 +601,22 @@ app.post('/api/admin/playlists/:id/export/yandex', async (req, res) => {
             data: { serviceUrl }
         });
 
-        // 6. Send Telegram Notifications
+        // 6. Send Automatic Telegram Notifications
         try {
             const users = await prisma.user.findMany({
-                where: {
-                    telegramId: {
-                        not: 0n // Or whatever valid check you have, BigInt > 0
-                    }
-                }
+                where: { telegramId: { not: 0n } } // Or whatever valid check you have, BigInt > 0
             });
 
             const message = `🎧 Вышел новый собранный плейлист: <b>${playlist.title}</b>!\n\nСлушать здесь: <a href="${serviceUrl}">Яндекс Музыка</a>\n\nНе забудь закинуть новый трек!`;
 
             // Send in background to avoid blocking the response
-            console.log(`Sending notifications to ${users.length} users...`);
+            console.log(`Sending automatic notifications to ${users.length} users...`);
             Promise.all(users.map(user => sendTelegramMessage(user.telegramId.toString(), message)))
-                .then(() => console.log('Successfully broadcasted to all users.'))
-                .catch(err => console.error('Error during broadcast:', err));
+                .then(() => console.log('Successfully broadcasted automatic notifications.'))
+                .catch(err => console.error('Error during automatic broadcast:', err));
 
         } catch (notifErr) {
-            console.error('Failed to fetch users for notification:', notifErr);
+            console.error('Failed to fetch users for automatic notification:', notifErr);
         }
 
         res.json({
@@ -638,6 +634,46 @@ app.post('/api/admin/playlists/:id/export/yandex', async (req, res) => {
     } catch (e) {
         console.error('Yandex Export Error:', e.response?.data || e.message);
         res.status(500).json({ error: e.message + (e.response?.data ? ' - ' + JSON.stringify(e.response.data) : '') });
+    }
+});
+
+// POST /api/admin/playlists/:id/notify - Manually trigger Telegram notification
+app.post('/api/admin/playlists/:id/notify', async (req, res) => {
+    const adminId = req.headers['x-admin-id'];
+    if (!adminId) return res.status(401).json({ error: 'Unauthorized' });
+
+    try {
+        const admin = await prisma.user.findUnique({ where: { id: Number(adminId) } });
+        if (!admin || !admin.isAdmin) return res.status(403).json({ error: 'Forbidden' });
+
+        const playlist = await prisma.playlist.findUnique({
+            where: { id: Number(req.params.id) },
+        });
+
+        if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
+        if (!playlist.serviceUrl) return res.status(400).json({ error: 'Playlist does not have a serviceUrl yet' });
+
+        const users = await prisma.user.findMany({
+            where: {
+                telegramId: {
+                    not: 0n
+                }
+            }
+        });
+
+        const message = `🎧 Вышел новый собранный плейлист: <b>${playlist.title}</b>!\n\nСлушать здесь: <a href="${playlist.serviceUrl}">Яндекс Музыка</a>\n\nНе забудь закинуть новый трек!`;
+
+        console.log(`Sending manual notifications to ${users.length} users...`);
+        // We'll wait for this to finish to give immediate feedback to admin if necessary, 
+        // but background is fine too. Let's send in background and return success immediately.
+        Promise.all(users.map(user => sendTelegramMessage(user.telegramId.toString(), message)))
+            .then(() => console.log('Successfully broadcasted to all users.'))
+            .catch(err => console.error('Error during broadcast:', err));
+
+        res.json({ success: true, count: users.length });
+    } catch (error) {
+        console.error('Manual Notification Error:', error);
+        res.status(500).json({ error: 'Notification failed' });
     }
 });
 
