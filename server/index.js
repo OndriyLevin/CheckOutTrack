@@ -121,7 +121,7 @@ app.post('/api/tracks', async (req, res) => {
             return res.status(409).json({ error: 'Этот трек уже был добавлен!' });
         }
 
-        // Check for User Limit (Max 5 Pending)
+        // Check for User Limit (Max 1 Pending)
         const userPendingCount = await prisma.track.count({
             where: {
                 userId: Number(userId),
@@ -129,8 +129,8 @@ app.post('/api/tracks', async (req, res) => {
             }
         });
 
-        if (userPendingCount >= 5) {
-            return res.status(429).json({ error: 'Вы не можете добавить больше 5 треков в очередь!' });
+        if (userPendingCount >= 1) {
+            return res.status(429).json({ error: 'Вы не можете добавить больше 1 трека в очередь!' });
         }
 
         const track = await prisma.track.create({

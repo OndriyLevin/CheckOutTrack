@@ -219,8 +219,10 @@ onMounted(async () => {
         <div class="flex justify-center mb-4">
              <img src="/images/logo.png" alt="Cassette Logo" class="w-32 h-auto drop-shadow-[0_0_15px_rgba(255,200,0,0.5)] transform -rotate-3" />
         </div>
-        <h1 class="text-4xl font-black text-white tracking-tight uppercase italic block drop-shadow-lg">
-          Зацени <span class="text-brand-yellow">Рознице</span> Трек
+        <h1 class="text-4xl font-black text-white tracking-tight uppercase italic flex justify-center items-center drop-shadow-lg flex-wrap group">
+          <span class="mr-2">Зацени</span> 
+          <span class="text-brand-yellow animate-zap">Рознице</span>
+          <span class="ml-2 transition-all duration-500 delay-1000 group-[.animated]:ml-0 group-[.animated]:-translate-x-2">Трек</span>
         </h1>
         <p class="text-gray-400 text-sm font-medium leading-relaxed max-w-[280px] mx-auto">
           Йо, <span class="text-white font-bold">{{ user.first_name }}</span>! <br>
@@ -448,3 +450,54 @@ onMounted(async () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@keyframes zapOut {
+  0% {
+    opacity: 1;
+    filter: brightness(1);
+    transform: scale(1);
+    max-width: 200px;
+    margin-right: 0.5rem;
+  }
+  15%, 35% {
+    opacity: 0;
+    filter: brightness(2) drop-shadow(0 0 10px white) drop-shadow(0 0 20px #eab308);
+  }
+  25%, 45% {
+    opacity: 1;
+    filter: brightness(3) drop-shadow(0 0 20px white) drop-shadow(0 0 40px #eab308);
+    transform: scale(1.1) skewX(-10deg);
+  }
+  50% {
+    opacity: 1;
+    filter: brightness(5) drop-shadow(0 0 50px white) drop-shadow(0 0 80px #fff);
+    transform: scale(1.4) skewX(20deg);
+    max-width: 200px;
+    margin-right: 0.5rem;
+  }
+  55% {
+    opacity: 0;
+    transform: scale(1.5);
+    max-width: 0px;
+    margin-right: 0;
+    padding: 0;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0);
+    max-width: 0px;
+    margin-right: 0;
+    padding: 0;
+    pointer-events: none;
+  }
+}
+
+.animate-zap {
+  display: inline-block;
+  animation: zapOut 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  animation-delay: 0.8s;
+  overflow: hidden;
+  white-space: nowrap;
+}
+</style>
