@@ -652,6 +652,7 @@ app.post('/api/admin/playlists/:id/notify', async (req, res) => {
 
         if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
         if (!playlist.serviceUrl) return res.status(400).json({ error: 'Playlist does not have a serviceUrl yet' });
+        if (!BOT_TOKEN) return res.status(400).json({ error: 'BOT_TOKEN is not configured on the server.' });
 
         const users = await prisma.user.findMany({
             where: {
