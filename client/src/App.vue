@@ -222,7 +222,7 @@ onMounted(async () => {
         <h1 class="text-4xl font-black text-white tracking-tight uppercase italic flex justify-center items-center drop-shadow-lg flex-wrap group">
           <span class="mr-2">Зацени</span> 
           <span class="text-brand-yellow animate-zap">Рознице</span>
-          <span class="ml-2 transition-all duration-500 delay-1000 group-[.animated]:ml-0 group-[.animated]:-translate-x-2">Трек</span>
+          <span class="ml-2 transition-all duration-500 delay-1000 group-[.animated]:ml-0 group-[.animated]:-translate-x-2 animate-color-shift">Трек</span>
         </h1>
         <p class="text-gray-400 text-sm font-medium leading-relaxed max-w-[280px] mx-auto">
           Йо, <span class="text-white font-bold">{{ user.first_name }}</span>! <br>
@@ -499,5 +499,20 @@ onMounted(async () => {
   animation-delay: 0.8s;
   overflow: hidden;
   white-space: nowrap;
+}
+
+@keyframes colorShift {
+  0% {
+    color: white;
+  }
+  100% {
+    color: #eab308;
+    text-shadow: 0 0 15px rgba(234, 179, 8, 0.5);
+  }
+}
+
+.animate-color-shift {
+  animation: colorShift 0.4s ease-out forwards;
+  animation-delay: 1.6s;
 }
 </style>
