@@ -162,9 +162,6 @@ const handleFileUpload = (e) => { playlistForm.value.coverFile = e.target.files[
 // Helper for images
 const getImageUrl = (url) => {
     if (!url) return '';
-    if (url.startsWith('/uploads')) {
-        return `/music${url}`;
-    }
     return url;
 }
 

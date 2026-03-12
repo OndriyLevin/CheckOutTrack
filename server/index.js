@@ -16,8 +16,7 @@ const BOT_TOKEN = process.env.BOT_TOKEN;
 // Helper: Send Telegram Notification .!.
 async function sendTelegramMessage(chatId, text) {
     if (!BOT_TOKEN) {
-        console.warn('BOT_TOKEN is not set. Skipping Telegram notification.');
-        return;
+        return { success: false, error: 'BOT_TOKEN is not set' };
     }
     try {
         await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
@@ -25,8 +24,11 @@ async function sendTelegramMessage(chatId, text) {
             text: text,
             parse_mode: 'HTML'
         });
+        return { success: true, chatId };
     } catch (e) {
-        console.error(`Failed to send Telegram message to ${chatId}:`, e.response?.data || e.message);
+        const errDesc = e.response?.data?.description || e.message;
+        console.error(`Failed to send Telegram message to ${chatId}:`, errDesc);
+        return { success: false, chatId, error: errDesc };
     }
 }
 
@@ -665,13 +667,22 @@ app.post('/api/admin/playlists/:id/notify', async (req, res) => {
         const message = `🎧 Вышел новый собранный плейлист: <b>${playlist.title}</b>!\n\nСлушать здесь: <a href="${playlist.serviceUrl}">Яндекс Музыка</a>\n\nНе забудь закинуть новый трек!`;
 
         console.log(`Sending manual notifications to ${users.length} users...`);
-        // We'll wait for this to finish to give immediate feedback to admin if necessary, 
-        // but background is fine too. Let's send in background and return success immediately.
-        Promise.all(users.map(user => sendTelegramMessage(user.telegramId.toString(), message)))
-            .then(() => console.log('Successfully broadcasted to all users.'))
-            .catch(err => console.error('Error during broadcast:', err));
+        const results = await Promise.all(users.map(user => sendTelegramMessage(user.telegramId.toString(), message)));
 
-        res.json({ success: true, count: users.length });
+        const successful = results.filter(r => r.success);
+        const failed = results.filter(r => !r.success);
+
+        if (successful.length === 0 && failed.length > 0) {
+            // Nothing succeeded
+            console.error('All Telegram notifications failed. First error:', failed[0].error);
+            return res.status(500).json({ error: `Telegram API Error: ${failed[0].error}` });
+        }
+
+        res.json({
+            success: true,
+            count: successful.length,
+            failedCount: failed.length
+        });
     } catch (error) {
         console.error('Manual Notification Error:', error);
         res.status(500).json({ error: 'Notification failed' });
